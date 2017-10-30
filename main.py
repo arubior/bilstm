@@ -75,34 +75,32 @@ for i_batch, sample_batched in enumerate(dataloaders['val']):
 # Model definition
 # ----------------
 
-"""
 class ConvNet(nn.Module):
-    def __init__(self, input_size, n_classes):
+    def __init__(self, n_classes):
         super(ConvNet, self).__init__()
 
-        self.input_size = input_size
-        self.output_size = output_size
 
-        self.features = nn.Sequential([
-            (self.conv1 = nn.Conv2d(n_channels, 224, 3)),
-            (self.pool1 = nn.MaxPool2d(2)),
-            (self.conv2 = nn.Conv2d(32, 64, 3)),
-            (self.pool2 = nn.MaxPool2d(2))])
+        model = models.alexnet(pretrained=True)
+        import epdb; epdb.set_trace();
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 224, kernel_size=3),
+            nn.MaxPool2d(2),
+            nn.Conv2d(224, 111, 3),
+            nn.MaxPool2d(2))
 
         self.classifier = nn.Sequential(
-            ('fc1', nn.Linear(h*w*64/4, 4096)),
-            ('relu1', nn.ReLU(inplace=True)),
-            ('fc2', nn.Linear(4096, 1024)),
-            ('relu2', nn.ReLU(inplace=True)),
-            ('fc3', nn.Linear(1024, n_classes)),
-            ('class', nn.Softmax())])
+            nn.Linear(111*54*54, 4096),
+            nn.ReLU(inplace=true),
+            nn.Linear(4096, 1024),
+            nn.ReLU(inplace=true),
+            nn.Linear(1024, n_classes),
+            nn.SoftMax())
 
     def forward(self, x):
         x = self.features(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
 
-"""
 
 
 # CNN Model (2 conv layer)
@@ -269,6 +267,10 @@ if __name__ == '__main__':
     #
 
     model_ft = models.resnet18(pretrained=True)
+    model_ft = CNN()
+    model_ft = ConvNet(2)
+
+    import epdb; epdb.set_trace();
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Linear(num_ftrs, 2)
     # model_ft = model
