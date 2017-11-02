@@ -17,7 +17,7 @@ torch.manual_seed(1)
 data_transforms = {
         'train': transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize([256, 256]),
+            transforms.Scale(256),
             transforms.RandomCrop((224, 224)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -25,7 +25,7 @@ data_transforms = {
         ]),
         'val': transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize([224, 224]),
+            transforms.Scale(224),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])}
@@ -275,8 +275,10 @@ optimizer = optim.SGD(model.parameters(), lr=0.01, weight_decay=1e-4)
 print(model.forward(autograd.Variable(kltraining_data[0][0])))
 
 # Make sure prepare_sequence from earlier in the LSTM section is loaded
-for epoch in range(
-        300):  # again, normally you would NOT do 300 epochs, it is toy data
+numepochs = 300
+for epoch in range(numepochs):  # again, normally you would NOT do 300 epochs, it is toy data
+    sys.stdout.write("Epoch %i/%i\r" % (epoch, numepochs))
+    sys.stdout.flush()
     for sentence, tags in kltraining_data:
         # Step 1. Remember that Pytorch accumulates gradients.
         # We need to clear them out before each instance
