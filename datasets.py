@@ -37,3 +37,20 @@ class KiwisLlamasDataset(Dataset):
             image = self.transform(image)
 
         return {'image': image, 'tag': self.tags[idx]}
+
+class PolyvoreDataset(Dataset):
+    """ Polyvore dataset."""
+
+    def __init__(self, txt_file, root_dir, transform=None):
+        """
+        Args:
+            txt_file (string): Path to the txt file with path to images.
+            root_dir (string): Directory where the txt files train and test are
+                               located (and also the folders with images).
+            transform (callable, optional): Optional transform to be applied on
+                                            a sample.
+        """
+        self.root_dir = root_dir
+        self.transform = transform
+        self.filenames = [f.replace('\n', '') for f in
+                                open(os.path.join(root_dir, txt_file)).readlines()]
