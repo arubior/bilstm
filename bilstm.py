@@ -1,3 +1,5 @@
+import time
+import sys
 import torch
 import torch.autograd as autograd
 import torch.nn as nn
@@ -30,7 +32,7 @@ data_transforms = {
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])}
 
-data_dir = 'dataset'
+data_dir = 'datasets/kiwisllamas'
 image_datasets = {x: KiwisLlamasDataset('%s.txt' % x,
                                          data_dir,
                                          transform=data_transforms[x])
@@ -96,17 +98,17 @@ class FC_BiLSTM_CRF(nn.Module):
         self.fc = nn.Sequential(nn.Linear(embedding_dim, 20),
                                 nn.Linear(20, fc_dim))
         """
-        self.features = models.alexnet(pretrained=True)
+        self.features = models.alexnet(pretrained=True).cuda()
         self.lstm = nn.LSTM(1000, hidden_dim // 2,
-                            num_layers=1, bidirectional=True)
+                            num_layers=1, bidirectional=True).cuda()
 
         # Maps the output of the LSTM into tag space.
-        self.hidden2tag = nn.Linear(hidden_dim, self.tagset_size)
+        self.hidden2tag = nn.Linear(hidden_dim, self.tagset_size).cuda()
 
         # Matrix of transition parameters.  Entry i,j is the score of
         # transitioning *to* i *from* j.
         self.transitions = nn.Parameter(
-            torch.randn(self.tagset_size, self.tagset_size))
+            torch.randn(self.tagset_size, self.tagset_size)).cuda()
 
         # These two statements enforce the constraint that we never transfer
         # to the start tag and we never transfer from the stop tag
@@ -116,17 +118,17 @@ class FC_BiLSTM_CRF(nn.Module):
         self.hidden = self.init_hidden()
 
     def init_hidden(self):
-        return (autograd.Variable(torch.randn(2, 1, self.hidden_dim // 2)),
-                autograd.Variable(torch.randn(2, 1, self.hidden_dim // 2)))
+        return (autograd.Variable(torch.randn(2, 1, self.hidden_dim // 2)).cuda(),
+                autograd.Variable(torch.randn(2, 1, self.hidden_dim // 2)).cuda())
 
     def _forward_alg(self, feats):
         # Do the forward algorithm to compute the partition function
-        init_alphas = torch.Tensor(1, self.tagset_size).fill_(-10000.)
+        init_alphas = torch.Tensor(1, self.tagset_size).fill_(-10000.).cuda()
         # START_TAG has all of the score.
         init_alphas[0][self.tag_to_ix[START_TAG]] = 0.
 
         # Wrap in a variable so that we will get automatic backprop
-        forward_var = autograd.Variable(init_alphas)
+        forward_var = autograd.Variable(init_alphas).cuda()
 
         # Iterate through the sentence
         for feat in feats:
@@ -154,15 +156,15 @@ class FC_BiLSTM_CRF(nn.Module):
         self.hidden = self.init_hidden()
         # embeds = self.word_embeds(sentence).view(len(sentence), 1, -1)
         alex_feats = self.features(sentence)
-        lstm_out, self.hidden = self.lstm(alex_feats, self.hidden)
+        lstm_out, self.hidden = self.lstm(alex_feats.unsqueeze(1), self.hidden)
         lstm_out = lstm_out.view(len(sentence), self.hidden_dim)
         lstm_feats = self.hidden2tag(lstm_out)
         return lstm_feats
 
     def _score_sentence(self, feats, tags):
         # Gives the score of a provided tag sequence
-        score = autograd.Variable(torch.Tensor([0]))
-        tags = torch.cat([torch.LongTensor([self.tag_to_ix[START_TAG]]), tags])
+        score = autograd.Variable(torch.Tensor([0])).cuda()
+        tags = torch.cat([torch.LongTensor([self.tag_to_ix[START_TAG]]).cuda(), tags])
         for i, feat in enumerate(feats):
             score = score + \
                 self.transitions[tags[i + 1], tags[i]] + feat[tags[i + 1]]
@@ -177,7 +179,7 @@ class FC_BiLSTM_CRF(nn.Module):
         init_vvars[0][self.tag_to_ix[START_TAG]] = 0
 
         # forward_var at step i holds the viterbi variables for step i-1
-        forward_var = autograd.Variable(init_vvars)
+        forward_var = autograd.Variable(init_vvars).cuda()
         for feat in feats:
             bptrs_t = []  # holds the backpointers for this step
             viterbivars_t = []  # holds the viterbi variables for this step
@@ -242,9 +244,9 @@ training_data = [(
     "B I O O O O B".split()
 )]
 
-kimgs = torch.FloatTensor()
+kimgs = torch.FloatTensor().cuda()
 ktags = []
-limgs = torch.FloatTensor()
+limgs = torch.FloatTensor().cuda()
 ltags = []
 
 for i, data in enumerate(dataloaders['train']):
@@ -253,12 +255,21 @@ for i, data in enumerate(dataloaders['train']):
         inputs, labels = data['image'], data['tag']
         for idx, lab in enumerate(labels):
             if lab is 0:
-                kimgs = torch.cat((kimgs, torch.unsqueeze(inputs[idx], 0)), 0)
+                kimgs = torch.cat((kimgs, torch.unsqueeze(inputs[idx], 0).cuda()), 0)
                 ktags.append(lab)
             else:
-                limgs = torch.cat((limgs, torch.unsqueeze(inputs[idx], 0)), 0)
+                limgs = torch.cat((limgs, torch.unsqueeze(inputs[idx], 0).cuda()), 0)
                 ltags.append(lab)
-kltraining_data = [(kimgs, ktags), (limgs, ltags)]
+kl_data = [(kimgs, ktags), (limgs, ltags)]
+lenkls = min(len(kl_data[0][0]), len(kl_data[1][0]))
+ilen = 9
+kltraining_data = []
+for i in range(int(lenkls/ilen)):
+    kltraining_data.append((kimgs[i*ilen:(i+1)*ilen], ktags[i*ilen:(i+1)*ilen]))
+    kltraining_data.append((limgs[i*ilen:(i+1)*ilen], ltags[i*ilen:(i+1)*ilen]))
+
+kltraining_data = kl_data
+import epdb; epdb.set_trace();
 
 word_to_ix = {}
 for sentence, tags in training_data:
@@ -270,15 +281,16 @@ tag_to_ix = {0: 0, 1: 1, START_TAG: 2, STOP_TAG: 3}
 
 model = FC_BiLSTM_CRF(tag_to_ix, EMBEDDING_DIM, FC_DIM, HIDDEN_DIM)
 optimizer = optim.SGD(model.parameters(), lr=0.01, weight_decay=1e-4)
+model.cuda()
 
 # Check predictions before training
-print(model.forward(autograd.Variable(kltraining_data[0][0])))
+print("Predictions before training:")
+print(model.forward(autograd.Variable(kltraining_data[0][0].cuda())))
 
 # Make sure prepare_sequence from earlier in the LSTM section is loaded
-numepochs = 300
+numepochs = 5000
+tic = time.time()
 for epoch in range(numepochs):  # again, normally you would NOT do 300 epochs, it is toy data
-    sys.stdout.write("Epoch %i/%i\r" % (epoch, numepochs))
-    sys.stdout.flush()
     for sentence, tags in kltraining_data:
         # Step 1. Remember that Pytorch accumulates gradients.
         # We need to clear them out before each instance
@@ -286,9 +298,10 @@ for epoch in range(numepochs):  # again, normally you would NOT do 300 epochs, i
 
         # Step 2. Get our inputs ready for the network, that is,
         # turn them into Variables of word indices.
-        targets = torch.LongTensor([tag_to_ix[t] for t in tags])
+        targets = torch.LongTensor([tag_to_ix[t] for t in tags]).cuda()
 
         # Step 3. Run our forward pass.
+        # neg_log_likelihood = model.neg_log_likelihood(autograd.Variable(sentence), targets)
         neg_log_likelihood = model.neg_log_likelihood(autograd.Variable(sentence), targets)
 
         # Step 4. Compute the loss, gradients, and update the parameters by
@@ -297,8 +310,10 @@ for epoch in range(numepochs):  # again, normally you would NOT do 300 epochs, i
         optimizer.step()
 
         writer.add_scalar('data/loss', neg_log_likelihood.data[0], epoch) # data grouping by `slash` 
+    sys.stdout.write("Epoch %i/%i took %f seconds\r" % (epoch, numepochs, time.time() - tic))
+    sys.stdout.flush()
 
 # Check predictions after training
+print("Predictions after training:")
 print(model(autograd.Variable(kltraining_data[0][0])))
-# We got it!
 writer.close()

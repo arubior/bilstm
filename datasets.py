@@ -1,4 +1,5 @@
 import os
+import json
 from skimage import io
 from torch.utils.data import Dataset
 
@@ -37,3 +38,32 @@ class KiwisLlamasDataset(Dataset):
             image = self.transform(image)
 
         return {'image': image, 'tag': self.tags[idx]}
+
+class PolyvoreDataset(Dataset):
+    """ Polyvore dataset."""
+
+    def __init__(self, json_file, img_dir, img_transform=None, txt_transform=None):
+        """
+        Args:
+            json_file (string): Path to the json file with the data.
+            img_dir (string): Directory where the image files are located.
+            transform (callable, optional): Optional transform to be applied on
+                                            a sample.
+        """
+        self.img_dir = img_dir
+        self.data = json.load(open(json_file))
+        self.img_transform = img_transform
+        self.txt_transform = txt_transform
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        items = data[idx]['items']
+        images = [io.imread(os.path.join(self.img_dir, i['image'])) for i in items]
+        texts = [i['name'] for i in items]
+
+        if self.transform:
+            images = [self.transform(image) for image in images]
+
+        return {images, texts}
