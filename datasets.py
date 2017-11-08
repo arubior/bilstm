@@ -1,5 +1,6 @@
 import os
 import json
+from PIL import Image
 from skimage import io
 from torch.utils.data import Dataset
 
@@ -59,11 +60,15 @@ class PolyvoreDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        items = data[idx]['items']
-        images = [io.imread(os.path.join(self.img_dir, i['image'])) for i in items]
+        set_id = self.data[idx]['set_id']
+        items = self.data[idx]['items']
+        images = [Image.open(os.path.join(self.img_dir, set_id, '%s.jpg' % i['index'])) for i in items]
         texts = [i['name'] for i in items]
 
-        if self.transform:
-            images = [self.transform(image) for image in images]
+        if self.img_transform:
+            images = [self.img_transform(image) for image in images]
 
-        return {images, texts}
+        if self.txt_transform:
+            texts = [self.txt_transform(t) for t in texts]
+
+        return (images, texts)
