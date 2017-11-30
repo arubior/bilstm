@@ -1,4 +1,8 @@
 """Bi-LSTM network."""
+import torch
+import torch.nn as nn
+import torch.autograd as autograd
+
 
 class Network(nn.Module):
     """Bi-LSTM network."""
@@ -15,6 +19,7 @@ class Network(nn.Module):
         return self.lstm(data, hidden)
 
     def init_hidden(self):
+        """Initialize the hidden state and cell state."""
         return (autograd.Variable(torch.randn(2, 1, self.hidden_dim // 2)),
                 autograd.Variable(torch.randn(2, 1, self.hidden_dim // 2)))
 

@@ -3,9 +3,10 @@ import torch
 import torch.nn as nn
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from model import Network
 
 
-def create_random_packed_seq(data_dim, seq_lens):
+def create_packed_seq(data_dim, seq_lens):
     """Create a packed input of sequences for a RNN."""
     seqs = [autograd.Variable(torch.randn(data_dim, sl)) for sl in seq_lens]
     t_seqs = []
@@ -19,23 +20,6 @@ def create_random_packed_seq(data_dim, seq_lens):
     t_seqs = t_seqs.permute(0, 2, 1)  # now it is (batch size, max length, data_dim)
 
     return pack_padded_sequence(t_seqs, seq_lens, batch_first=True)
-
-
-class Network(nn.Module):
-    def __init__(self, input_dim, hidden_dim):
-        """Create the network."""
-        super(Network, self).__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.lstm = nn.LSTM(input_dim, hidden_dim)
-
-    def forward(self, data, hidden):
-        """Do a forward pass."""
-        return self.lstm(data, hidden)
-
-    def init_hidden(self):
-        return (autograd.Variable(torch.randn(1, 1, self.hidden_dim)),
-                autograd.Variable(torch.randn(1, 1, self.hidden_dim)))
 
 
 def main():
