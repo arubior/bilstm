@@ -1,12 +1,13 @@
-"""Bi-LSTM network."""
+"""Bi-LSTM network adapted for wemodels."""
 # pylint: disable=W0221
 # pylint: disable=E1101
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
+from wemodels.pytorch.wenet import WENet
 
 
-class BiLSTM(nn.Module):
+class BiLSTM(WENet):
     """Bi-LSTM architecture definition.
 
     Args:

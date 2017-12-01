@@ -1,7 +1,11 @@
 """Script for using the BiLSTM model in model.py with sequence inputs."""
+# pylint: disable=E1101
+import argparse
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.autograd as autograd
+import torchvision
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from model import BiLSTM
@@ -55,34 +59,43 @@ def create_packed_seq(model, img_transform, data, batch_first=False):
 
     """
     # First, get all inputs and keep the information about the sequence they belong to.
-    images = []
-    seq_tags = torch.Tensor()
+    images = torch.Tensor()
+    seq_lens = torch.zeros(len(data))
+    lookup_table = []
+    count = 0
     for seq_tag, seq_imgs in data:
+        seq_lookup = []
         for img in seq_imgs:
-            inp = img_transform(img)
-            inputs = torch.cat((inputs, inp))
-            seq_tags.append(seq_tag)
+            images = torch.cat((images,
+                                torchvision.transforms.ToTensor()(img_transform(img))))
+            seq_lookup.append(count)
+            count += 1
+            seq_lens[seq_tag] += 1
+        lookup_table.append(seq_lookup)
 
     # Then, extract their features.
-    feats = model(torch.Variable(inputs))
+    feats = model(torch.Variable(images))
 
+    # Manually create the padded sequence.
+    seqs = torch.Tensor(len(data), max(seq_lens), feats.size()[1])
+    for i in range(len(data)):  # Iterate over batch
+        for j in range(max(seq_lens)):  # Iterate over sequence
+            if j < seq_lens[i]:
+                seqs[i, j] = feats[lookup_table[i][j]]
+            else:
+                seqs[i, j] = torch.zeros(feats.size()[1])
 
+    # In order to be packed, sequences must be ordered from larger to shorter.
+    seq_idxs = sorted(range(len(seq_lens)), key=lambda k: seq_lens[k], reverse=True)
+    seqs = feats[seq_idxs, :]
 
-    seqs = [autograd.Variable(torch.randn(data_dim, sl)) for sl in seq_lens]
-    t_seqs = []
-    for seq in seqs:
-        if seq.size()[1] < max(seq_lens):
-            t_seqs.append(torch.cat((seq, torch.zeros(data_dim, max(seq_lens) - seq.size()[1])), 1))
-        else:
-            t_seqs.append(seq)
-
-    t_seqs = torch.stack(t_seqs)  # t_seqs is (batch size, data_dim, max length)
+    # seqs is (batch size, data_dim, max length)
     if batch_first:
-        t_seqs = t_seqs.permute(0, 2, 1)  # now it is (batch size, max length, data_dim)
+        seqs = seqs.permute(0, 2, 1)  # now it is (batch size, max length, data_dim)
     else:
-        t_seqs = t_seqs.permute(2, 0, 1)  # now it is (max length, max length, data_dim)
+        seqs = seqs.permute(2, 0, 1)  # now it is (max length, max length, data_dim)
 
-    return pack_padded_sequence(t_seqs, seq_lens, batch_first=batch_first)
+    return pack_padded_sequence(seqs, seq_lens, batch_first=batch_first)
 
 
 def loss_forward(feats, hidden, seq_lens):
@@ -142,16 +155,29 @@ def loss_backward(feats, hidden, seq_lens):
 
 def main():
     """Forward sequences."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cuda', dest='cuda', action='store_true')
+    parser.add_argument('--no-cuda', dest='cuda', action='store_false')
+    parser.add_argument('--multigpu', nargs='*', default=[])
+    parser.set_defaults(cuda=True)
+    args = parser.parse_args()
     seq_lens = [5, 5, 3, 1]  # batch size = 4, max length = 5
     batch_size = len(seq_lens)
     input_dim = 100
     hidden_dim = 512
     inception = models.inception_v3(pretrained=True)
-    data = create_packed_seq(inception, input_dim, seq_lens)
+    im_transform = ImageTransforms(size=299)
+    data = create_packed_seq(inception, im_transform, input_dim, seq_lens)
     data = create_random_packed_seq(input_dim, seq_lens)
     batch_first = True
 
     model = BiLSTM(input_dim, hidden_dim, batch_first)
+    if args.cuda:
+        model = model.cuda()
+    if args.multigpu:
+        model = model.cuda()
+        model = nn.DataParallel(model, devices=args.multigpu)
+
     hidden = model.init_hidden(batch_size)
     out, hidden = model.forward(data, hidden)
     out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: the sequence lengths
