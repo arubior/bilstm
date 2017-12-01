@@ -5,9 +5,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.autograd as autograd
+import torch.nn.functional as F
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torchvision
 import torchvision.models as models
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from model import BiLSTM
 from transforms import ImageTransforms
 
@@ -86,8 +87,7 @@ def create_packed_seq(model, img_transform, data, batch_first=False):
                 seqs[i, j] = torch.zeros(feats.size()[1])
 
     # In order to be packed, sequences must be ordered from larger to shorter.
-    seq_idxs = sorted(range(len(seq_lens)), key=lambda k: seq_lens[k], reverse=True)
-    seqs = feats[seq_idxs, :]
+    seqs = feats[sorted(range(len(seq_lens)), key=lambda k: seq_lens[k], reverse=True), :]
 
     # seqs is (batch size, data_dim, max length)
     if batch_first:
@@ -102,8 +102,10 @@ def loss_forward(feats, hidden, seq_lens):
     """Compute the forward loss of a batch.
 
     Args:
-        - feats: a batch inputs of the LSTM (padded) - for now, batch first (batch_size x max_seq_len x feat_dimension)
-        - hidden: outputs of the LSTM for the same batch - for now, batch first (batch_size x max_seq_len x hidden_dim)
+        - feats: a batch inputs of the LSTM (padded) - for now, batch first
+                (batch_size x max_seq_len x feat_dimension)
+        - hidden: outputs of the LSTM for the same batch - for now, batch first
+                (batch_size x max_seq_len x hidden_dim)
 
     Returns:
         - autograd.Variable containing the forward loss value for a batch.
@@ -153,6 +155,29 @@ def loss_backward(feats, hidden, seq_lens):
     return loss/n_seqs
 
 
+class ContrastiveLoss(torch.nn.Module):
+    """
+    Contrastive loss function.
+    Based on:
+    """
+
+    def __init__(self, margin=1.0):
+        super(ContrastiveLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, x0, x1, y):
+        # euclidian distance
+        diff = x0 - x1
+        dist_sq = torch.sum(torch.pow(diff, 2), 1)
+        dist = torch.sqrt(dist_sq)
+
+        mdist = self.margin - dist
+        dist = torch.clamp(mdist, min=0.0)
+        loss = y * dist_sq + (1 - y) * torch.pow(dist, 2)
+        loss = torch.sum(loss) / 2.0 / x0.size()[0]
+        return loss
+
+
 def main():
     """Forward sequences."""
     parser = argparse.ArgumentParser()
@@ -161,6 +186,9 @@ def main():
     parser.add_argument('--multigpu', nargs='*', default=[])
     parser.set_defaults(cuda=True)
     args = parser.parse_args()
+
+    batch_first = True
+
     seq_lens = [5, 5, 3, 1]  # batch size = 4, max length = 5
     batch_size = len(seq_lens)
     input_dim = 100
@@ -169,14 +197,13 @@ def main():
     im_transform = ImageTransforms(size=299)
     data = create_packed_seq(inception, im_transform, input_dim, seq_lens)
     data = create_random_packed_seq(input_dim, seq_lens)
-    batch_first = True
 
     model = BiLSTM(input_dim, hidden_dim, batch_first)
     if args.cuda:
         model = model.cuda()
     if args.multigpu:
         model = model.cuda()
-        model = nn.DataParallel(model, devices=args.multigpu)
+        model = nn.DataParallel(model, device_ids=args.multigpu)
 
     hidden = model.init_hidden(batch_size)
     out, hidden = model.forward(data, hidden)
