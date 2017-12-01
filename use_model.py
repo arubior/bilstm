@@ -1,16 +1,44 @@
 """Script for using the BiLSTM model in model.py with sequence inputs."""
 # pylint: disable=E1101
+import time
 import argparse
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.optim as optim
 import torch.autograd as autograd
-import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torchvision
 import torchvision.models as models
 from model import BiLSTM
 from transforms import ImageTransforms
+
+
+########################################################
+# DATA LOADER
+# ~~~~~~~~~~~
+
+itr = {'train': ImageTransforms(227, 5, 224),
+       'test': ImageTransforms(224)}
+
+ttr = TextTransforms()
+
+img_train_tf = lambda x: torchvision.transforms.ToTensor()(itr['train'].random_crop(
+                     itr['train'].random_rotation(itr['train'].random_horizontal_flip(
+                     itr['train'].resize(x)))))
+img_test_val_tf = lambda x: torchvision.transforms.ToTensor()(itr['test'].resize(x))
+
+txt_train_tf = lambda x: ttr.random_delete(ttr.normalize(x))
+txt_test_val_tf = lambda x: ttr.normalize(x)
+
+img_transforms = {'train': img_train_tf,
+                  'test': img_test_val_tf,
+                  'val': img_test_val_tf}
+
+txt_transforms = {'train': txt_train_tf,
+                  'test': txt_test_val_tf,
+                  'val': txt_test_val_tf}
+
 
 def create_random_packed_seq(data_dim, seq_lens, batch_first=False):
     """Create a random packed input of sequences for a RNN."""
@@ -29,20 +57,6 @@ def create_random_packed_seq(data_dim, seq_lens, batch_first=False):
         t_seqs = t_seqs.permute(2, 0, 1)  # now it is (max length, max length, data_dim)
 
     return pack_padded_sequence(t_seqs, seq_lens, batch_first=batch_first)
-
-
-def get_feats(model, inputs):
-    """Extract features from inputs.
-
-    Args:
-        - model: CNN model.
-        - inputs: tensor of N images.
-
-    Returns:
-        - tensor of N features.
-
-    """
-    return model(inputs)
 
 
 def create_packed_seq(model, img_transform, data, batch_first=False):
@@ -155,28 +169,6 @@ def loss_backward(feats, hidden, seq_lens):
     return loss/n_seqs
 
 
-class ContrastiveLoss(torch.nn.Module):
-    """
-    Contrastive loss function.
-    Based on:
-    """
-
-    def __init__(self, margin=1.0):
-        super(ContrastiveLoss, self).__init__()
-        self.margin = margin
-
-    def forward(self, x0, x1, y):
-        # euclidian distance
-        diff = x0 - x1
-        dist_sq = torch.sum(torch.pow(diff, 2), 1)
-        dist = torch.sqrt(dist_sq)
-
-        mdist = self.margin - dist
-        dist = torch.clamp(mdist, min=0.0)
-        loss = y * dist_sq + (1 - y) * torch.pow(dist, 2)
-        loss = torch.sum(loss) / 2.0 / x0.size()[0]
-        return loss
-
 
 def main():
     """Forward sequences."""
@@ -193,6 +185,7 @@ def main():
     batch_size = len(seq_lens)
     input_dim = 100
     hidden_dim = 512
+    margin = 0.2
     inception = models.inception_v3(pretrained=True)
     im_transform = ImageTransforms(size=299)
     data = create_packed_seq(inception, im_transform, input_dim, seq_lens)
@@ -205,10 +198,57 @@ def main():
         model = model.cuda()
         model = nn.DataParallel(model, device_ids=args.multigpu)
 
-    hidden = model.init_hidden(batch_size)
-    out, hidden = model.forward(data, hidden)
-    out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: the sequence lengths
-    print out
+    # hidden = model.init_hidden(batch_size)
+    # out, hidden = model.forward(data, hidden)
+    # out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: the sequence lengths
+    # print out
+
+    img_dir = 'datasets/polyvore/images'
+    json_dir = 'datasets/polyvore/label'
+    json_files = {'train': 'train_no_dup.json',
+                  'test': 'test_no_dup.json',
+                  'val': 'valid_no_dup.json'}
+
+    image_datasets = {x: PolyvoreDataset(os.path.join(json_dir, json_files[x]),
+                                         img_dir,
+                                         img_transform=img_transforms[x],
+                                         txt_transform=txt_transforms[x])
+                      for x in ['train', 'test', 'val']}
+
+    dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
+    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x],
+                                batch_size=batch_size, shuffle=True, num_workers=1)
+                   for x in ['train', 'test', 'val']}
+
+
+    optimizer = optim.SGD(model.parameters(), lr=0.2, weight_decay=1e-4)
+
+    numepochs = 200
+    tic = time.time()
+    for epoch in range(numepochs):  # again, normally you would NOT do 300 epochs, it is toy data
+        for batch in dataloaders['train']:
+            # Clear gradients, reset hidden state.
+            model.zero_grad()
+            hidden = model.init_hidden(batch_size)
+
+            # Prepare data
+            packed_batch = create_packed_seq(model, img_transforms['train'],
+                                             batch, batch_first=batch_first)
+
+            # Forward pass
+            # neg_log_likelihood = model.neg_log_likelihood(autograd.Variable(sentence), targets)
+            out, hidden = model.forward(packed_batch, hidden)
+            out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: seq lengths
+
+            # loss = model.ContrastiveLoss(margin)
+            loss = loss_forward(feats, hidden, seq_lens) + loss_backward(feats, hidden, seq_lens)
+
+            loss.backward()
+            optimizer.step()
+
+            writer.add_scalar('data/loss', neg_log_likelihood.data[0], epoch) # data grouping by `slash`
+        sys.stdout.write("Epoch %i/%i took %f seconds\r" % (epoch, numepochs, time.time() - tic))
+        sys.stdout.flush()
 
 
 if __name__ == '__main__':

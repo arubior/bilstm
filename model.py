@@ -39,6 +39,7 @@ class ContrastiveLoss(torch.nn.Module):
     """
     Contrastive loss function.
     Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    Extracted from: hackernoon.com/facial-similarity-with-siamese-networks-in-pytorch-9642aa9db2f7
     """
 
     def __init__(self, margin=2.0):
