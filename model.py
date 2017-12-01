@@ -4,15 +4,22 @@ import torch.nn as nn
 import torch.autograd as autograd
 
 
-class Network(nn.Module):
-    """Bi-LSTM network."""
+class BiLSTM(nn.Module):
+    """Bi-LSTM architecture definition.
+
+    Args:
+        - input_dim: dimension of the input
+        - hidden_dim: dimension of the hidden/output layer
+        - batch_first: parameter of the PackedSequence data
+
+    """
 
     def __init__(self, input_dim, hidden_dim, batch_first=False):
         """Create the network."""
-        super(Network, self).__init__()
+        super(BiLSTM, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
-        self.lstm = nn.LSTM(input_dim, hidden_dim,
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1,
                             batch_first=batch_first, bidirectional=True)
 
     def forward(self, data, hidden):
@@ -23,4 +30,3 @@ class Network(nn.Module):
         """Initialize the hidden state and cell state."""
         return (autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)),
                 autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)))
-
