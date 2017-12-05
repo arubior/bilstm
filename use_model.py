@@ -47,7 +47,7 @@ txt_transforms = {'train': txt_train_tf,
                   'val': txt_test_val_tf}
 
 
-def create_packed_seq(model, data, batch_first=False):
+def create_packed_seq(model, data, cuda, batch_first=False):
     """Create a packed input of sequences for a RNN.
 
     Args:
@@ -75,10 +75,16 @@ def create_packed_seq(model, data, batch_first=False):
             seq_lens[seq_tag] += 1
         lookup_table.append(seq_lookup)
 
-    feats, _ = model(autograd.Variable(images).cuda())
+    if cuda:
+        feats, _ = model(autograd.Variable(images).cuda())
+    else:
+        feats, _ = model(autograd.Variable(images))
 
     # Manually create the padded sequence.
-    seqs = autograd.Variable(torch.zeros((len(img_data), max(seq_lens), feats.size()[1]))).cuda()
+    if cuda:
+        seqs = autograd.Variable(torch.zeros((len(img_data), max(seq_lens), feats.size()[1]))).cuda()
+    else:
+        seqs = autograd.Variable(torch.zeros((len(img_data), max(seq_lens), feats.size()[1])))
     for i in range(len(img_data)):  # Iterate over batch
         for j in range(max(seq_lens)):  # Iterate over sequence
             if j < seq_lens[i]:
@@ -97,7 +103,7 @@ def create_packed_seq(model, data, batch_first=False):
     return pack_padded_sequence(seqs, ordered_seq_lens, batch_first=batch_first)
 
 
-def lstm_losses(feats, hidden, seq_lens):
+def lstm_losses(feats, hidden, seq_lens, cuda):
     """Compute the forward and backward loss of a batch.
 
     Args:
@@ -105,6 +111,8 @@ def lstm_losses(feats, hidden, seq_lens):
                 (batch_size x max_seq_len x feat_dimension)
         - hidden: outputs of the LSTM for the same batch - for now, batch first
                 (batch_size x max_seq_len x hidden_dim)
+        - seq_lens: sequence lengths
+        - cuda: bool specifying whether to use (True) or not (False) a GPU.
 
     Returns:
         Tuple containing two autograd.Variable values: the forward and backward losses for a batch.
@@ -114,12 +122,16 @@ def lstm_losses(feats, hidden, seq_lens):
     bw_loss = autograd.Variable(torch.zeros(1))
     for i, seq_len in enumerate(seq_lens):
         fw_seq_loss = 0
-        fw_seq_feats = torch.cat((feats[i, :seq_len, :],
-                                  torch.zeros(1, feats.size()[2])))
+        # Create a first and last vector of zeros:
+        start_stop = autograd.Variable(torch.zeros(1, feats.size()[2]))
+        if cuda:
+            start_stop = start_stop.cuda()
+        fw_seq_feats = torch.cat((feats[i, :seq_len, :], start_stop))
+        import epdb; epdb.set_trace()
         fw_seq_hiddens = hidden[i, :seq_len, :hidden.size()[2] // 2]  # Get forward hidden state
 
         bw_seq_loss = 0
-        bw_seq_feats = torch.cat((torch.zeros(1, feats.size()[2]),
+        bw_seq_feats = torch.cat((start_stop,
                                   feats[i, :seq_len, :]))
         bw_seq_hiddens = hidden[i, :seq_len, hidden.size()[2] // 2:]  # Get backward hidden state
 
@@ -150,15 +162,16 @@ def main():
 
     batch_first = True
 
-    # seq_lens = [5, 5, 3, 1]  # batch size = 4, max length = 5
-    # batch_size = len(seq_lens)
-    batch_size = 3
-    input_dim = 100
+    batch_size = 2
+    input_dim = 512
     hidden_dim = 512
     margin = 0.2
+    tic = time.time()
     inception_emb = models.inception_v3(pretrained=True)
     inception_emb.fc = nn.Linear(2048, 512)
+    print "inception loading took %.2f secs" % (time.time() - tic)
 
+    tic = time.time()
     model = BiLSTM(input_dim, hidden_dim, batch_first)
     if args.cuda:
         model = model.cuda()
@@ -168,11 +181,7 @@ def main():
         inception_emb = inception_emb.cuda()
         model = nn.DataParallel(model, device_ids=args.multigpu)
         inception_emb = nn.DataParallel(inception_emb, device_ids=args.multigpu)
-
-    # hidden = model.init_hidden(batch_size)
-    # out, hidden = model.forward(data, hidden)
-    # out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: the sequence lengths
-    # print out
+    print "models to cuda took %.2f secs" % (time.time() - tic)
 
     img_dir = 'data/images'
     json_dir = 'data/label'
@@ -180,35 +189,47 @@ def main():
                   'test': 'test_no_dup.json',
                   'val': 'valid_no_dup.json'}
 
+    tic = time.time()
     image_datasets = {x: PolyvoreDataset(os.path.join(json_dir, json_files[x]),
                                          img_dir,
                                          img_transform=img_transforms[x],
                                          txt_transform=txt_transforms[x])
                       for x in ['train', 'test', 'val']}
+    print "image_datasets took %.2f secs" % (time.time() - tic)
 
+    tic = time.time()
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=batch_size,
-                                                  shuffle=True, num_workers=1,
+                                                  shuffle=True, num_workers=4,
                                                   collate_fn=collate_seq)
                    for x in ['train', 'test', 'val']}
+    print "dataloaders took %.2f secs" % (time.time() - tic)
 
+    tic = time.time()
     optimizer = optim.SGD(model.parameters(), lr=0.2, weight_decay=1e-4)
+    print "optimizer took %.2f secs" % (time.time() - tic)
 
     numepochs = 200
     tic = time.time()
     for epoch in range(numepochs):  # again, normally you would NOT do 300 epochs, it is toy data
         for i_batch, batch in enumerate(dataloaders['train']):
             # Clear gradients, reset hidden state.
+            tic = time.time()
             model.zero_grad()
+            print "zero_grad took %.2f secs" % (time.time() - tic)
             hidden = model.init_hidden(batch_size)
+            if args.cuda:
+                hidden = (hidden[0].cuda(), hidden[1].cuda())
 
             # Prepare data
-            packed_batch = create_packed_seq(inception_emb, batch, batch_first=batch_first)
+            packed_batch = create_packed_seq(inception_emb, batch, args.cuda, batch_first=batch_first)
+            out, hidden = model.forward(packed_batch, hidden)
+            import epdb; epdb.set_trace()
+            out, seq_lens = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: seq lengths
+            lstm_losses(packed_batch, out, seq_lens, args.cuda)
             import epdb; epdb.set_trace()
             """
             # Forward pass
             # neg_log_likelihood = model.neg_log_likelihood(autograd.Variable(sentence), targets)
-            out, hidden = model.forward(packed_batch, hidden)
-            out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: seq lengths
 
             # loss = model.ContrastiveLoss(margin)
             loss = loss_forward(feats, hidden, seq_lens) + loss_backward(feats, hidden, seq_lens)
