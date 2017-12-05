@@ -1,16 +1,24 @@
-import PIL
+"""Custom transformations for image and text preprocessing."""
 import random
-import sys 
+import PIL
 import numpy as np
 # reload(sys)
 # sys.setdefaultencoding('utf8')
 from nltk.stem import WordNetLemmatizer
 
 class ImageTransforms(object):
-    def __init__(self, size=None, angle=None, crop_size=None):
+    """Custom image transformations.
 
+    Args:
+        [size]: size to resize images (can be int (square) or tuple(width, height)).
+        [angle]: maximum angle for rotation.
+        [crop_size]: size of the random crops (again: int or tuple).
+
+    """
+
+    def __init__(self, size=None, angle=None, crop_size=None, hflip_ratio=None):
         if size is not None:
-            assert isinstance(size, tuple) or isinstance(size, int), "Size must be a tuple or an int"
+            assert isinstance(size, (int, tuple)), "Size must be tuple or int"
             if isinstance(size, tuple):
                 assert len(size) == 2, "Size must have 1 (square) or 2 dimensions: (width, height)"
             if isinstance(size, int):
@@ -18,18 +26,32 @@ class ImageTransforms(object):
         self.size = size
 
         if angle is not None:
-            assert isinstance(angle, float) or isinstance(angle, int), "Angle must be a float or int"
+            assert isinstance(angle, (float, int)), "Angle must be a float or int"
         self.angle = angle
-        
+
         if crop_size is not None:
-            assert isinstance(crop_size, tuple) or isinstance(crop_size, int), "Size must be a tuple or an int"
+            assert isinstance(crop_size, (int, tuple)), "Size must be a tuple or an int"
             if isinstance(crop_size, tuple):
-                assert len(crop_size) == 2, "Size must have 1 (square) or 2 dimensions: (width, height)"
+                assert len(crop_size) == 2, "Size must have 1 (square) or 2 dim: (width, height)"
             if isinstance(crop_size, int):
                 crop_size = (crop_size, crop_size)
         self.crop_size = crop_size
 
+        if hflip_ratio is not None:
+            assert isinstance(hflip_ratio, (int, float)), "hflip_ratio must be int or float"
+            assert hflip_ratio <= 1 and hflip_ratio >= 0, "hflip_ratio must be between [0, 1]"
+        self.hflip_ratio = hflip_ratio
+
     def resize(self, img):
+        """Resize and image.
+
+        Args:
+            img: PIL image.
+
+        Returns:
+            Resized PIL image.
+
+        """
         assert isinstance(img, PIL.Image.Image), "Image must be a PIL.Image.Image"
         if self.size is not None:
             return img.resize(self.size)
@@ -37,6 +59,15 @@ class ImageTransforms(object):
             raise ValueError('Size is not defined')
 
     def random_rotation(self, img):
+        """Rotate randomly an image.
+
+        Args:
+            img: PIL image.
+
+        Returns:
+            Rotated PIL image.
+
+        """
         assert isinstance(img, PIL.Image.Image), "Image must be a PIL.Image.Image"
         if self.angle is not None:
             return img.rotate(2*(random.random() - 0.5)*self.angle)
@@ -44,19 +75,36 @@ class ImageTransforms(object):
             raise ValueError('Angle is not defined')
 
     def random_horizontal_flip(self, img):
+        """Randomly flip horizontally an image.
+
+        Args:
+            img: PIL image.
+
+        Returns:
+            PIL image (flipped or not).
+
+        """
         assert isinstance(img, PIL.Image.Image), "Image must be a PIL.Image.Image"
-        if random.random() > 0.5:
+        if random.random() < self.hflip_ratio:
             return img.transpose(PIL.Image.FLIP_LEFT_RIGHT)
-        else:
-            return img
+        return img
 
     def random_crop(self, img):
+        """Randomly crop an image.
+
+        Args:
+            img: PIL image.
+
+        Returns:
+            PIL image of the cropped part.
+
+        """
         assert isinstance(img, PIL.Image.Image), "Image must be a PIL.Image.Image"
-        w, h = img.size
-        dx, dy = self.crop_size
-        x = random.randint(0, w-dx-1)
-        y = random.randint(0, h-dy-1)
-        return img.crop((x,y, x+dx, y+dy))
+        width, height = img.size
+        crop_x, crop_y = self.crop_size
+        x = random.randint(0, width-crop_x - 1)
+        y = random.randint(0, height-crop_y - 1)
+        return img.crop((x, y, x + crop_x, y + crop_y))
 
 class TextTransforms(object):
     def __init__(self, keep_numbers=False, delete_ratio=0):
@@ -72,7 +120,7 @@ class TextTransforms(object):
         text2 = ''
         for w in text.split():
             text2 += ' ' +  self.lemmatizer.lemmatize(w)
-	    
+
         text = text2
         text = " ".join(text.split("''"))
         text = " ' ".join(text.split("'"))
