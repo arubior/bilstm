@@ -47,7 +47,7 @@ txt_transforms = {'train': txt_train_tf,
                   'val': txt_test_val_tf}
 
 
-def create_packed_seq(model, data, cuda, batch_first=False):
+def create_packed_seq(model, data, cuda, batch_first):
     """Create a packed input of sequences for a RNN.
 
     Args:
@@ -95,6 +95,7 @@ def create_packed_seq(model, data, cuda, batch_first=False):
     # In order to be packed, sequences must be ordered from larger to shorter.
     seqs = seqs[sorted(range(len(seq_lens)), key=lambda k: seq_lens[k], reverse=True), :]
     ordered_seq_lens = sorted(seq_lens, reverse=True)
+    import epdb; epdb.set_trace()
 
     # seqs is (batch size, max length, data_dim)
     if not batch_first:
@@ -103,11 +104,11 @@ def create_packed_seq(model, data, cuda, batch_first=False):
     return pack_padded_sequence(seqs, ordered_seq_lens, batch_first=batch_first)
 
 
-def lstm_losses(feats, hidden, seq_lens, cuda):
+def lstm_losses(packed_feats, hidden, batch_first, cuda):
     """Compute the forward and backward loss of a batch.
 
     Args:
-        - feats: a batch inputs of the LSTM (padded) - for now, batch first
+        - feats: a PackedSequence batch inputs of the LSTM (padded) - for now, batch first
                 (batch_size x max_seq_len x feat_dimension)
         - hidden: outputs of the LSTM for the same batch - for now, batch first
                 (batch_size x max_seq_len x hidden_dim)
@@ -118,30 +119,44 @@ def lstm_losses(feats, hidden, seq_lens, cuda):
         Tuple containing two autograd.Variable values: the forward and backward losses for a batch.
 
     """
+    feats, seq_lens = pad_packed_sequence(packed_feats, batch_first=batch_first)
     fw_loss = autograd.Variable(torch.zeros(1))
     bw_loss = autograd.Variable(torch.zeros(1))
+    if cuda:
+        fw_loss = fw_loss.cuda()
+        bw_loss = bw_loss.cuda()
+
     for i, seq_len in enumerate(seq_lens):
-        fw_seq_loss = 0
+        fw_seq_loss = autograd.Variable(torch.zeros(1))
+        bw_seq_loss = autograd.Variable(torch.zeros(1))
+
         # Create a first and last vector of zeros:
         start_stop = autograd.Variable(torch.zeros(1, feats.size()[2]))
+
         if cuda:
             start_stop = start_stop.cuda()
+            fw_seq_loss = fw_seq_loss.cuda()
+            bw_seq_loss = bw_seq_loss.cuda()
+
         fw_seq_feats = torch.cat((feats[i, :seq_len, :], start_stop))
-        import epdb; epdb.set_trace()
         fw_seq_hiddens = hidden[i, :seq_len, :hidden.size()[2] // 2]  # Get forward hidden state
 
-        bw_seq_loss = 0
         bw_seq_feats = torch.cat((start_stop,
                                   feats[i, :seq_len, :]))
         bw_seq_hiddens = hidden[i, :seq_len, hidden.size()[2] // 2:]  # Get backward hidden state
 
         for j in xrange(seq_len):
-            fw_prob = np.exp(torch.dot(fw_seq_hiddens[j], fw_seq_feats[j + 1])) / \
-                torch.sum(np.exp(torch.mm(fw_seq_hiddens[j].unsqueeze(0), feats.permute(1, 0))))
+            fw_denom = np.sum([torch.exp(torch.mm(fw_seq_hiddens[j].unsqueeze(0),
+                                                  feats[k].permute(1, 0))).sum()
+                               for k in range(len(seq_lens))])
+            fw_prob = torch.exp(torch.dot(fw_seq_hiddens[j], fw_seq_feats[j + 1])) / fw_denom
             fw_seq_loss += fw_prob
             fw_seq_loss /= -seq_len
 
-            bw_prob = (bw_seq_hiddens[j] * bw_seq_feats[j]) / torch.sum(bw_seq_hiddens[j] * feats)
+            bw_denom = np.sum([torch.exp(torch.mm(bw_seq_hiddens[j].unsqueeze(0),
+                                                  feats[k].permute(1, 0))).sum()
+                               for k in range(len(seq_lens))])
+            bw_prob = torch.exp(torch.dot(bw_seq_hiddens[j], bw_seq_feats[j])) / bw_denom
             bw_seq_loss += bw_prob
             bw_seq_loss /= -seq_len
 
@@ -223,22 +238,16 @@ def main():
             # Prepare data
             packed_batch = create_packed_seq(inception_emb, batch, args.cuda, batch_first=batch_first)
             out, hidden = model.forward(packed_batch, hidden)
+            out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: seq lengths
+            fw_loss, bw_loss = lstm_losses(packed_batch, out, batch_first, args.cuda)
+            loss = fw_loss + bw_loss
             import epdb; epdb.set_trace()
-            out, seq_lens = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: seq lengths
-            lstm_losses(packed_batch, out, seq_lens, args.cuda)
-            import epdb; epdb.set_trace()
-            """
-            # Forward pass
-            # neg_log_likelihood = model.neg_log_likelihood(autograd.Variable(sentence), targets)
-
-            # loss = model.ContrastiveLoss(margin)
-            loss = loss_forward(feats, hidden, seq_lens) + loss_backward(feats, hidden, seq_lens)
-
             loss.backward()
             optimizer.step()
-
             WRITER.add_scalar('data/loss', loss.data[0], epoch)
-            """
+            print "Batch %d" % i_batch
+            # loss = model.ContrastiveLoss(margin)
+
         sys.stdout.write("Epoch %i/%i took %f seconds\r" % (epoch, numepochs, time.time() - tic))
         sys.stdout.flush()
 
