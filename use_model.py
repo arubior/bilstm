@@ -95,7 +95,6 @@ def create_packed_seq(model, data, cuda, batch_first):
     # In order to be packed, sequences must be ordered from larger to shorter.
     seqs = seqs[sorted(range(len(seq_lens)), key=lambda k: seq_lens[k], reverse=True), :]
     ordered_seq_lens = sorted(seq_lens, reverse=True)
-    import epdb; epdb.set_trace()
 
     # seqs is (batch size, max length, data_dim)
     if not batch_first:
@@ -141,9 +140,9 @@ def lstm_losses(packed_feats, hidden, batch_first, cuda):
         fw_seq_feats = torch.cat((feats[i, :seq_len, :], start_stop))
         fw_seq_hiddens = hidden[i, :seq_len, :hidden.size()[2] // 2]  # Get forward hidden state
 
-        bw_seq_feats = torch.cat((start_stop,
-                                  feats[i, :seq_len, :]))
+        bw_seq_feats = torch.cat((start_stop, feats[i, :seq_len, :]))
         bw_seq_hiddens = hidden[i, :seq_len, hidden.size()[2] // 2:]  # Get backward hidden state
+        import epdb; epdb.set_trace()
 
         for j in xrange(seq_len):
             fw_denom = np.sum([torch.exp(torch.mm(fw_seq_hiddens[j].unsqueeze(0),
@@ -240,12 +239,19 @@ def main():
             out, hidden = model.forward(packed_batch, hidden)
             out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: seq lengths
             fw_loss, bw_loss = lstm_losses(packed_batch, out, batch_first, args.cuda)
-            loss = fw_loss + bw_loss
             import epdb; epdb.set_trace()
-            loss.backward()
+            loss = fw_loss + bw_loss
+            WRITER.add_scalar('data/loss', loss.data[0], i_batch)
+            print [len(b['images']) for b in batch]
+            try:
+                loss.backward()
+                print "Batch %d" % i_batch
+            except Exception as e:
+                print e
+                import epdb; epdb.set_trace()
+
             optimizer.step()
-            WRITER.add_scalar('data/loss', loss.data[0], epoch)
-            print "Batch %d" % i_batch
+
             # loss = model.ContrastiveLoss(margin)
 
         sys.stdout.write("Epoch %i/%i took %f seconds\r" % (epoch, numepochs, time.time() - tic))
