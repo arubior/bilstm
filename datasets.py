@@ -1,44 +1,10 @@
+"""Polyvore dataset."""
 import os
 import json
+import collections
 from PIL import Image
-from skimage import io
 from torch.utils.data import Dataset
 
-
-########################################################
-# KIWIS & LLAMAS
-# ~~~~~~~~~~~~~~
-
-class KiwisLlamasDataset(Dataset):
-    """ Kiwis and llamas dataset."""
-
-    def __init__(self, txt_file, root_dir, transform=None):
-        """
-        Args:
-            txt_file (string): Path to the txt file with path to images.
-            root_dir (string): Directory where the txt files train and test are
-                               located (and also the folders with images).
-            transform (callable, optional): Optional transform to be applied on
-                                            a sample.
-        """
-        self.root_dir = root_dir
-        self.transform = transform
-        self.filenames = [f.replace('\n', '') for f in
-                                open(os.path.join(root_dir, txt_file)).readlines()]
-        # Label 0 for kiwis, 1 for llamas:
-        self.tags = [0 if 'kiwis' in f else 1 for f in self.filenames]
-
-    def __len__(self):
-        return len(self.filenames)
-
-    def __getitem__(self, idx):
-        img_name = os.path.join(self.root_dir, self.filenames[idx])
-        image = io.imread(img_name)
-
-        if self.transform:
-            image = self.transform(image)
-
-        return {'image': image, 'tag': self.tags[idx]}
 
 class PolyvoreDataset(Dataset):
     """ Polyvore dataset."""
@@ -60,15 +26,39 @@ class PolyvoreDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
+        """Get a specific index of the dataset (for dataloader batches).
+
+        Args:
+            idx: index of the dataset.
+
+        Returns:
+            Dictionary with two fields: images and texts, containing the corresponent sequence.
+
+        """
         set_id = self.data[idx]['set_id']
         items = self.data[idx]['items']
-        images = [Image.open(os.path.join(self.img_dir, set_id, '%s.jpg' % i['index'])) for i in items]
-        texts = [i['name'] for i in items]
+        images = []
+        # texts = []
+        for i in items:
+            img = Image.open(os.path.join(self.img_dir, set_id, '%s.jpg' % i['index']))
+            if img.layers == 1:  # Imgs with 1 channel are usually noise.
+                continue
+                # img = Image.merge("RGB", [img.split()[0], img.split()[0], img.split()[0]])
+            images.append(img)
+            # texts.append(i['name'])
 
         if self.img_transform:
             images = [self.img_transform(image) for image in images]
 
-        if self.txt_transform:
-            texts = [self.txt_transform(t) for t in texts]
+        # if self.txt_transform:
+            # texts = [self.txt_transform(t) for t in texts]
 
-        return (images, texts)
+        # return {'images': images, 'texts': texts}
+        return {'images': images}
+
+
+def collate_seq(batch):
+    """Return batches as we want: with variable item lengths."""
+    if isinstance(batch[0], collections.Mapping):
+        # return {key: default_collate([d[key] for d in batch]) for key in batch[0]}
+        return batch
