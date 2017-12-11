@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import torch
+import numpy as np
 import torch.autograd as autograd
 import torch.nn as nn
 import torch.optim as optim
@@ -274,7 +275,6 @@ def visualize_model(model, num_images=6):
                 return
 
 if __name__ == '__main__':
-    import epdb; epdb.set_trace();
 
     kimgs = torch.FloatTensor().cuda()
     ktags = []
@@ -284,7 +284,14 @@ if __name__ == '__main__':
     for i, data in enumerate(dataloaders['train']):
         if i < 35:
             # get the inputs
-            inputs, labels = data['image'], data['tag']
+            print(i)
+            images, texts = data
+            images = torch.stack(images)
+            for im in images:
+                import epdb; epdb.set_trace();
+                out = torchvision.utils.make_grid(images)
+                writer.add_image('Image', out, i) # Tensor
+            """
             for idx, lab in enumerate(labels):
                 if lab is 0:
                     kimgs = torch.cat((kimgs, torch.unsqueeze(inputs[idx], 0).cuda()), 0)
@@ -292,6 +299,9 @@ if __name__ == '__main__':
                 else:
                     limgs = torch.cat((limgs, torch.unsqueeze(inputs[idx], 0).cuda()), 0)
                     ltags.append(lab)
+            """
+    writer.close()
+    import epdb; epdb.set_trace();
     kl_data = [(kimgs, ktags), (limgs, ltags)]
     lenkls = min(len(kl_data[0][0]), len(kl_data[1][0]))
     ilen = 8
