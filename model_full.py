@@ -7,37 +7,8 @@ import torch.nn.functional as F
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torchvision.models as models
+from utils import seqs2batch
 
-
-def seqs2batch(data):
-    """Get a list of images from a list o sequences.
-
-    Args:
-        data: list of sequences (shaped batch_size x seq_len, with seq_len variable).
-
-    Returns:
-        images: list of images.
-        seq_lens: list of sequence lengths.
-        lookup_table: list (shaped batch_size x seq_len, with seq_len variable) containing
-            the indices of images in the image list.
-
-    """
-    # Get all inputs and keep the information about the sequence they belong to.
-    images = torch.Tensor()
-    img_data = [i['images'] for i in data]
-    seq_lens = torch.zeros(len(img_data)).int()
-    lookup_table = []
-    count = 0
-    for seq_tag, seq_imgs in enumerate(img_data):
-        seq_lookup = []
-        for img in seq_imgs:
-            images = torch.cat((images, img.unsqueeze(0)))
-            seq_lookup.append(count)
-            count += 1
-            seq_lens[seq_tag] += 1
-        lookup_table.append(seq_lookup)
-
-    return images, seq_lens, lookup_table
 
 
 class FullBiLSTM(nn.Module):
@@ -46,11 +17,12 @@ class FullBiLSTM(nn.Module):
     Args:
         - input_dim: dimension of the input.
         - hidden_dim: dimension of the hidden/output layer.
-        - batch_first: parameter of the PackedSequence data.
+        - [batch_first]: parameter of the PackedSequence data.
+        - [dropout]: dropout value for LSTM.
 
     """
 
-    def __init__(self, input_dim, hidden_dim, batch_first=False):
+    def __init__(self, input_dim, hidden_dim, batch_first=False, dropout=0):
         """Create the network."""
         super(FullBiLSTM, self).__init__()
         self.input_dim = input_dim
@@ -59,10 +31,23 @@ class FullBiLSTM(nn.Module):
         self.cnn = models.inception_v3(pretrained=True)
         self.cnn.fc = nn.Linear(2048, 512)
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1,
-                            batch_first=self.batch_first, bidirectional=True)
+                            batch_first=self.batch_first, bidirectional=True,
+                            dropout=dropout)
 
     def forward(self, data, hidden):
-        """Do a forward pass."""
+        """Do a forward pass.
+
+        The forward pass implies:
+            - A normal forward of the images through a CNN.
+            - A pass of the texts through a text embedding.
+            - Transforming the image features to a pytorch PackedSequence.
+            - Doing the forward pass through the LSTM.
+
+        Args:
+            - data: list of dictionaries with images and texts.
+            - hidden: hidden variables for the LSTM.
+
+        """
         # First, get a list of images from sequences:
         images, seq_lens, lookup_table = seqs2batch(data)
         # Then, get their features:

@@ -18,6 +18,7 @@ from datasets import collate_seq
 from tensorboardX import SummaryWriter
 
 WRITER = SummaryWriter()
+torch.manual_seed(1)
 
 ########################################################
 # DATA LOADER
@@ -43,83 +44,6 @@ img_transforms = {'train': img_train_tf,
 txt_transforms = {'train': txt_train_tf,
                   'test': txt_test_val_tf,
                   'val': txt_test_val_tf}
-
-
-def seqs2batch(data):
-    """Get a list of images from a list o sequences.
-
-    Args:
-        - data: list of sequences (shaped batch_size x seq_len, with seq_len variable).
-
-    Returns:
-        - images: list of images.
-        - seq_lens: list of sequence lengths.
-        - lookup_table: list (shaped batch_size x seq_len, with seq_len variable) containing
-            the indices of images in the image list.
-
-    """
-    # Get all inputs and keep the information about the sequence they belong to.
-    images = torch.Tensor()
-    img_data = [i['images'] for i in data]
-    seq_lens = torch.zeros(len(img_data)).int()
-    lookup_table = []
-    count = 0
-    for seq_tag, seq_imgs in enumerate(img_data):
-        seq_lookup = []
-        for img in seq_imgs:
-            images = torch.cat((images, img.unsqueeze(0)))
-            seq_lookup.append(count)
-            count += 1
-            seq_lens[seq_tag] += 1
-        lookup_table.append(seq_lookup)
-
-    return images, seq_lens, lookup_table
-
-
-def create_packed_seq(model, data, cuda, batch_first):
-    """Create a packed input of sequences for a RNN.
-
-    Args:
-        - model: a model to extract features from data.
-        - data: a list (with length batch_size) of sequences of images (shaped seq_len x img_dim)
-        - [batch_first] : determines the shape of the output.
-
-    Returns:
-        - torch PackedSequence (batch_size x max_seq_len x img_dim if batch_first = True,
-                                max_seq_len x batch_size x img_dim otherwise)
-
-    """
-    # First, get all inputs and keep the information about the sequence they belong to.
-    images, seq_lens, lookup_table = seqs2batch(data)
-
-    if cuda:
-        feats, _ = model(autograd.Variable(images).cuda())
-    else:
-        feats, _ = model(autograd.Variable(images))
-
-    # Manually create the padded sequence.
-    if cuda:
-        seqs = autograd.Variable(torch.zeros((len(data), max(seq_lens), feats.size()[1]))).cuda()
-    else:
-        seqs = autograd.Variable(torch.zeros((len(data), max(seq_lens), feats.size()[1])))
-    for i in range(len(data)):  # Iterate over batch
-        for j in range(max(seq_lens)):  # Iterate over sequence
-            if j < seq_lens[i]:
-                seqs[i, j] = feats[lookup_table[i][j]]
-            else:
-                seqs[i, j] = autograd.Variable(torch.zeros(feats.size()[1]))
-
-    # In order to be packed, sequences must be ordered from larger to shorter.
-    seqs = seqs[sorted(range(len(seq_lens)), key=lambda k: seq_lens[k], reverse=True), :]
-    ordered_seq_lens = sorted(seq_lens, reverse=True)
-
-    # seqs is (batch size, max length, data_dim)
-    if not batch_first:
-        seqs = seqs.permute(1, 0, 2)  # now it is (max length, max length, data_dim)
-
-    return pack_padded_sequence(seqs, ordered_seq_lens, batch_first=batch_first)
-
-
 
 
 def main():
