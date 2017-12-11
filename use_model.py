@@ -147,22 +147,22 @@ def lstm_losses(packed_feats, hidden, batch_first, cuda):
             fw_denom = torch.cat([torch.exp(torch.mm(fw_seq_hiddens[j].unsqueeze(0),
                                                      feats[k].permute(1, 0))).sum()
                                   for k in range(len(seq_lens))]).sum()
-
             fw_prob = torch.exp(torch.dot(fw_seq_hiddens[j], fw_seq_feats[j + 1])) / fw_denom
             fw_seq_loss += fw_prob
-            fw_seq_loss /= -seq_len
 
             bw_denom = torch.cat([torch.exp(torch.mm(bw_seq_hiddens[j].unsqueeze(0),
                                                      feats[k].permute(1, 0))).sum()
                                   for k in range(len(seq_lens))]).sum()
             bw_prob = torch.exp(torch.dot(bw_seq_hiddens[j], bw_seq_feats[j])) / bw_denom
             bw_seq_loss += bw_prob
-            bw_seq_loss /= -seq_len
+
+        fw_seq_loss = - torch.log(fw_seq_loss)/seq_len
+        bw_seq_loss = - torch.log(bw_seq_loss)/seq_len
 
         fw_loss += fw_seq_loss
         bw_loss += bw_seq_loss
 
-    return torch.log(fw_loss/len(seq_lens)), torch.log(bw_loss/len(seq_lens))
+    return fw_loss/len(seq_lens), bw_loss/len(seq_lens)
 
 
 def main():
