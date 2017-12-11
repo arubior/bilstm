@@ -81,23 +81,26 @@ class FullBiLSTM(nn.Module):
         """Create a packed input of sequences for a RNN.
 
         Args:
-            - feats: torch.Tensor with data features (N imgs x feat_dim).
-            - seq_lens: sequence lengths.
-            - lookup_table: list of image indices from seqs2batch.
+            - feats: features from images.
+            - data: list (with length batch_size) of sequences of images (shaped seq_len x img_dim)
 
         Returns:
             - torch PackedSequence (batch_size x max_seq_len x img_dim if batch_first = True,
-                                    max_seq_len x batch_size x img_dim otherwise).
+                                    max_seq_len x batch_size x img_dim otherwise)
 
         """
         # Manually create the padded sequence.
-        seqs = autograd.Variable(torch.zeros((len(seq_lens), max(seq_lens), feats.size()[1])))
-        for i in range(len(seq_lens)):  # Iterate over batch
+        if self.cuda:
+            seqs = autograd.Variable(torch.zeros((len(seq_lens), max(seq_lens),
+                                                  feats.size()[1]))).cuda()
+        else:
+            seqs = autograd.Variable(torch.zeros((len(seq_lens), max(seq_lens), feats.size()[1])))
+        for i, seq_len in enumerate(seq_lens):  # Iterate over batch
             for j in range(max(seq_lens)):  # Iterate over sequence
-                if j < seq_lens[i]:
+                if j < seq_len:
                     seqs[i, j] = feats[lookup_table[i][j]]
                 else:
-                    seqs[i, j] = torch.zeros(feats.size()[1])
+                    seqs[i, j] = autograd.Variable(torch.zeros(feats.size()[1]))
 
         # In order to be packed, sequences must be ordered from larger to shorter.
         seqs = seqs[sorted(range(len(seq_lens)), key=lambda k: seq_lens[k], reverse=True), :]
@@ -108,23 +111,3 @@ class FullBiLSTM(nn.Module):
             seqs = seqs.permute(1, 0, 2)  # now it is (max length, max length, data_dim)
 
         return pack_padded_sequence(seqs, ordered_seq_lens, batch_first=self.batch_first)
-
-
-class ContrastiveLoss(torch.nn.Module):
-    """
-    Contrastive loss function.
-    Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
-    Extracted from: hackernoon.com/facial-similarity-with-siamese-networks-in-pytorch-9642aa9db2f7
-    """
-
-    def __init__(self, margin=2.0):
-        super(ContrastiveLoss, self).__init__()
-        self.margin = margin
-
-    def forward(self, output1, output2, label):
-        euclidean_distance = F.pairwise_distance(output1, output2)
-        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                      (label) * torch.pow(torch.clamp(self.margin -
-                                                                      euclidean_distance,
-                                                                      min=0.0), 2))
-        return loss_contrastive
