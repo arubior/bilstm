@@ -10,10 +10,9 @@ import torch.autograd as autograd
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torchvision
 import torchvision.models as models
-from utils import seqs2batch
+from utils import seqs2batch, ImageTransforms, TextTransforms
 from model import FullBiLSTM
 from losses import LSTMLosses, SBContrastiveLoss
-from transforms import ImageTransforms, TextTransforms
 from datasets import PolyvoreDataset
 from datasets import collate_seq
 from tensorboardX import SummaryWriter
@@ -58,7 +57,7 @@ def main():
 
     batch_first = True
 
-    batch_size = 2
+    batch_size = 10
     input_dim = 512
     hidden_dim = 512
     margin = 0.2
@@ -134,13 +133,13 @@ def main():
             loss.backward()
             optimizer.step()
 
-            WRITER.add_scalar('data/loss', loss.data[0], i_batch)
-            WRITER.add_scalar('data/loss_FW', fw_loss.data[0], i_batch)
-            WRITER.add_scalar('data/loss_BW', bw_loss.data[0], i_batch)
+            WRITER.add_scalar('data/loss', loss.data[0], (epoch + 1) * i_batch)
+            WRITER.add_scalar('data/loss_FW', fw_loss.data[0], (epoch + 1) * i_batch)
+            WRITER.add_scalar('data/loss_BW', bw_loss.data[0], (epoch + 1) * i_batch)
             print("\033[1;31mEpoch %d - Batch %d (%.2f secs)\033[0m" % (epoch, i_batch, time.time() - tic_b))
             print("\033[1;36m----------------------\033[0m")
-            print("\033[1;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" % (fw_loss.data[0], bw_loss.data[0]))
-            print("\033[1;4;92mTOTAL LOSS: %.2f\033[0m" % loss.data[0])
+            print("\033[0;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" % (fw_loss.data[0], bw_loss.data[0]))
+            print("\033[0;4;92mTOTAL LOSS: %.2f\033[0m" % loss.data[0])
             print("\033[1;36m----------------------\033[0m")
 
         print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))
