@@ -11,7 +11,7 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torchvision
 import torchvision.models as models
 from utils import seqs2batch
-from model_full import FullBiLSTM
+from model import FullBiLSTM
 from losses import LSTMLosses, SBContrastiveLoss
 from transforms import ImageTransforms, TextTransforms
 from datasets import PolyvoreDataset
