@@ -1,4 +1,6 @@
 """Loss functions used in the Bi-LSTM paper."""
+# pylint: disable=E1101
+# pylint: disable=W0221
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

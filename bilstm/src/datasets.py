@@ -1,8 +1,10 @@
 """Polyvore dataset."""
+# pylint: disable=E1101
+# pylint: disable=R0903
 import os
 import json
-import numpy as np
 import collections
+import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 

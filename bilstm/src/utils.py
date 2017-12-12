@@ -1,11 +1,13 @@
 """Some utilities."""
-import torch
+# pylint: disable=E1101
 import random
+import torch
 import PIL
 import numpy as np
 # reload(sys)
 # sys.setdefaultencoding('utf8')
 from nltk.stem import WordNetLemmatizer
+
 
 def seqs2batch(data):
     """Get a list of images from a list of sequences.
@@ -51,6 +53,7 @@ class ImageTransforms(object):
     def __init__(self, size=None, angle=None, crop_size=None, hflip_ratio=None):
         if size is not None:
             assert isinstance(size, (int, tuple)), "Size must be tuple or int"
+            assert size > 0, "Size must be greater than 0"
             if isinstance(size, tuple):
                 assert len(size) == 2, "Size must have 1 (square) or 2 dimensions: (width, height)"
             if isinstance(size, int):
@@ -63,6 +66,7 @@ class ImageTransforms(object):
 
         if crop_size is not None:
             assert isinstance(crop_size, (int, tuple)), "Size must be a tuple or an int"
+            assert crop_size > 0, "Size must be greater than 0"
             if isinstance(crop_size, tuple):
                 assert len(crop_size) == 2, "Size must have 1 (square) or 2 dim: (width, height)"
             if isinstance(crop_size, int):
@@ -138,6 +142,7 @@ class ImageTransforms(object):
         y_top = random.randint(0, height-crop_y - 1)
         return img.crop((x_left, y_top, x_left + crop_x, y_top + crop_y))
 
+
 class TextTransforms(object):
     """Custom text transformations.
 
@@ -158,7 +163,7 @@ class TextTransforms(object):
         text = text.lower()
         text2 = ''
         for word in text.split():
-            text2 += ' ' +  self.lemmatizer.lemmatize(word)
+            text2 += ' ' + self.lemmatizer.lemmatize(word)
 
         text = text2
         text = " ".join(text.split("''"))

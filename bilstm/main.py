@@ -1,5 +1,7 @@
 """Script for using the BiLSTM model in model.py with sequence inputs."""
 # pylint: disable=E1101
+# pylint: disable=C0325
+# pylint: disable=W0403
 import os
 import time
 import argparse
@@ -7,9 +9,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.autograd as autograd
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pad_packed_sequence
 import torchvision
-import torchvision.models as models
 from src.utils import seqs2batch, ImageTransforms, TextTransforms
 from src.model import FullBiLSTM
 from src.losses import LSTMLosses, SBContrastiveLoss
@@ -24,60 +25,55 @@ torch.manual_seed(1)
 # DATA LOADER
 # ~~~~~~~~~~~
 
-itr = {'train': ImageTransforms(305, 5, 299, 0.5),
-       'test': ImageTransforms(299)}
+IMG_TRF = {'train': ImageTransforms(305, 5, 299, 0.5),
+           'test': ImageTransforms(299)}
 
-ttr = TextTransforms()
+TXT_TRF = TextTransforms()
 
-img_train_tf = lambda x: torchvision.transforms.ToTensor()(itr['train'].random_crop(
-                     itr['train'].random_rotation(itr['train'].random_horizontal_flip(
-                     itr['train'].resize(x)))))
-img_test_val_tf = lambda x: torchvision.transforms.ToTensor()(itr['test'].resize(x))
+IMG_TRAIN_TF = lambda x: torchvision.transforms.ToTensor()(IMG_TRF['train'].random_crop(
+    IMG_TRF['train'].random_rotation(IMG_TRF['train'].random_horizontal_flip(
+        IMG_TRF['train'].resize(x)))))
+IMG_TEST_VAL_TF = lambda x: torchvision.transforms.ToTensor()(IMG_TRF['test'].resize(x))
 
-txt_train_tf = lambda x: ttr.random_delete(ttr.normalize(x))
-txt_test_val_tf = lambda x: ttr.normalize(x)
+TXT_TRAIN_TF = lambda x: TXT_TRF.random_delete(TXT_TRF.normalize(x))
+# pylint: disable=W0108
+TXT_TEST_VAL_TF = lambda x: TXT_TRF.normalize(x)
+# pylint: enable=W0108
 
-img_transforms = {'train': img_train_tf,
-                  'test': img_test_val_tf,
-                  'val': img_test_val_tf}
+IMG_TRANSFORMS = {'train': IMG_TRAIN_TF,
+                  'test': IMG_TEST_VAL_TF,
+                  'val': IMG_TEST_VAL_TF}
 
-txt_transforms = {'train': txt_train_tf,
-                  'test': txt_test_val_tf,
-                  'val': txt_test_val_tf}
+TXT_TRANSFORMS = {'train': TXT_TRAIN_TF,
+                  'test': TXT_TEST_VAL_TF,
+                  'val': TXT_TEST_VAL_TF}
 
 
 def main():
     """Forward sequences."""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cuda', dest='cuda', action='store_true')
-    parser.add_argument('--no-cuda', dest='cuda', action='store_false')
-    parser.add_argument('--multigpu', nargs='*', default=[])
+    parser.add_argument('--batch_size', '-bs', type=int, help='batch size', default=10)
+    parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
+    parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
+    parser.add_argument('--batch_first', dest='batch_first', action='store_true')
+    parser.add_argument('--no-batch_first', dest='batch_first', action='store_false')
+    parser.add_argument('--multigpu', nargs='*', default=[], help='list of gpus to use')
     parser.set_defaults(cuda=True)
+    parser.set_defaults(batch_first=True)
     args = parser.parse_args()
 
-    batch_first = True
-
-    batch_size = 10
     input_dim = 512
     hidden_dim = 512
     margin = 0.2
-    tic = time.time()
-    # inception_emb = models.inception_v3(pretrained=True)
-    # inception_emb.fc = nn.Linear(2048, 512)
-    # print("inception loading took %.2f secs" % (time.time() - tic))
 
-    tic = time.time()
-    # model = BiLSTM(input_dim, hidden_dim, batch_first, dropout=0.7)
-    model = FullBiLSTM(input_dim, hidden_dim, batch_first, dropout=0.7)
+    model = FullBiLSTM(input_dim, hidden_dim, args.batch_first, dropout=0.7)
     if args.cuda:
+        print("Switching model to gpu")
         model.cuda()
-        # inception_emb.cuda()
     if args.multigpu:
+        print("Switching model to multigpu")
         model.cuda()
-        # inception_emb.cuda()
         model = nn.DataParallel(model, device_ids=args.multigpu)
-        # inception_emb = nn.DataParallel(inception_emb, device_ids=args.multigpu)
-    print("models to cuda took %.2f secs" % (time.time() - tic))
 
     img_dir = 'data/images'
     json_dir = 'data/label'
@@ -85,30 +81,22 @@ def main():
                   'test': 'test_no_dup.json',
                   'val': 'valid_no_dup.json'}
 
-    tic = time.time()
-    image_datasets = {x: PolyvoreDataset(os.path.join(json_dir, json_files[x]),
-                                         img_dir,
-                                         img_transform=img_transforms[x],
-                                         txt_transform=txt_transforms[x])
-                      for x in ['train', 'test', 'val']}
-    print("image_datasets took %.2f secs" % (time.time() - tic))
-
-    tic = time.time()
-    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=batch_size,
-                                                  shuffle=True, num_workers=4,
-                                                  collate_fn=collate_seq)
+    dataloaders = {x: torch.utils.data.DataLoader(
+        PolyvoreDataset(os.path.join(json_dir, json_files[x]), img_dir,
+                        img_transform=IMG_TRANSFORMS[x], txt_transform=TXT_TRANSFORMS[x]),
+        batch_size=args.batch_size,
+        shuffle=True, num_workers=4,
+        collate_fn=collate_seq)
                    for x in ['train', 'test', 'val']}
-    print("dataloaders took %.2f secs" % (time.time() - tic))
 
-    tic = time.time()
     optimizer = optim.SGD(model.parameters(), lr=0.2, weight_decay=1e-4)
-    criterion = LSTMLosses(batch_first, args.cuda)
+    criterion = LSTMLosses(args.batch_first, args.cuda)
     contrastive_criterion = SBContrastiveLoss(margin)
-    print("optimizer took %.2f secs" % (time.time() - tic))
 
-    numepochs = 200
+    numepochs = 20
+    n_iter = 0
     tic = time.time()
-    for epoch in range(numepochs):  # again, normally you would NOT do 300 epochs, it is toy data
+    for epoch in range(numepochs):
         for i_batch, batch in enumerate(dataloaders['train']):
             tic_b = time.time()
             # Clear gradients, reset hidden state.
@@ -125,7 +113,7 @@ def main():
                 images = autograd.Variable(images)
 
             packed_batch, (out, hidden) = model.forward(images, seq_lens, lookup_table, hidden)
-            out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: seq lengths
+            out, _ = pad_packed_sequence(out, batch_first=args.batch_first)
             fw_loss, bw_loss = criterion(packed_batch, out)
             # cont_loss = contrastive_criterion()
             loss = fw_loss + bw_loss  # + cont_loss
@@ -133,12 +121,17 @@ def main():
             loss.backward()
             optimizer.step()
 
-            WRITER.add_scalar('data/loss', loss.data[0], (epoch + 1) * i_batch)
-            WRITER.add_scalar('data/loss_FW', fw_loss.data[0], (epoch + 1) * i_batch)
-            WRITER.add_scalar('data/loss_BW', bw_loss.data[0], (epoch + 1) * i_batch)
-            print("\033[1;31mEpoch %d - Batch %d (%.2f secs)\033[0m" % (epoch, i_batch, time.time() - tic_b))
+            WRITER.add_scalar('data/loss', loss.data[0], n_iter)
+            WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
+            WRITER.add_scalar('data/loss_BW', bw_loss.data[0], n_iter)
+
+            n_iter += 1
+
+            print("\033[1;31mEpoch %d - Batch %d (%.2f secs)\033[0m" %
+                  (epoch, i_batch, time.time() - tic_b))
             print("\033[1;36m----------------------\033[0m")
-            print("\033[0;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" % (fw_loss.data[0], bw_loss.data[0]))
+            print("\033[0;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" %
+                  (fw_loss.data[0], bw_loss.data[0]))
             print("\033[0;4;92mTOTAL LOSS: %.2f\033[0m" % loss.data[0])
             print("\033[1;36m----------------------\033[0m")
 
