@@ -70,11 +70,11 @@ class FullBiLSTM(nn.Module):
             - feats: torch.Tensor with data features (N imgs x feat_dim).
             - seq_lens: sequence lengths.
             - lookup_table: list of image indices from seqs2batch.
-            - data: list (with length batch_size) of sequences of images (shaped seq_len x img_dim)
+            - data: list (with length batch_size) of sequences of images (shaped seq_len x img_dim).
 
         Returns:
             - torch PackedSequence (batch_size x max_seq_len x img_dim if batch_first = True,
-                                    max_seq_len x batch_size x img_dim otherwise)
+                                    max_seq_len x batch_size x img_dim otherwise).
 
         """
         # Manually create the padded sequence.

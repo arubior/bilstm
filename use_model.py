@@ -58,7 +58,7 @@ def main():
 
     batch_first = True
 
-    batch_size = 10
+    batch_size = 2
     input_dim = 512
     hidden_dim = 512
     margin = 0.2
