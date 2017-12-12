@@ -114,7 +114,7 @@ def main():
             tic_b = time.time()
             # Clear gradients, reset hidden state.
             model.zero_grad()
-            hidden = model.init_hidden(batch_size)
+            hidden = model.init_hidden(len(batch))
 
             # Get a list of images and texts from sequences:
             images, seq_lens, lookup_table = seqs2batch(batch)

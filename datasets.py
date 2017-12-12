@@ -1,6 +1,7 @@
 """Polyvore dataset."""
 import os
 import json
+import numpy as np
 import collections
 from PIL import Image
 from torch.utils.data import Dataset
@@ -41,9 +42,14 @@ class PolyvoreDataset(Dataset):
         # texts = []
         for i in items:
             img = Image.open(os.path.join(self.img_dir, set_id, '%s.jpg' % i['index']))
-            if img.layers == 1:  # Imgs with 1 channel are usually noise.
-                continue
-                # img = Image.merge("RGB", [img.split()[0], img.split()[0], img.split()[0]])
+            try:
+                if img.layers == 1:  # Imgs with 1 channel are usually noise.
+                    continue
+                    # img = Image.merge("RGB", [img.split()[0], img.split()[0], img.split()[0]])
+            except AttributeError:
+                # Images with size = 1 in any dimension are useless.
+                if np.any(np.array(img.size) == 1):
+                    continue
             images.append(img)
             # texts.append(i['name'])
 
