@@ -10,11 +10,11 @@ import torch.autograd as autograd
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torchvision
 import torchvision.models as models
-from utils import seqs2batch, ImageTransforms, TextTransforms
-from model import FullBiLSTM
-from losses import LSTMLosses, SBContrastiveLoss
-from datasets import PolyvoreDataset
-from datasets import collate_seq
+from src.utils import seqs2batch, ImageTransforms, TextTransforms
+from src.model import FullBiLSTM
+from src.losses import LSTMLosses, SBContrastiveLoss
+from src.datasets import PolyvoreDataset
+from src.datasets import collate_seq
 from tensorboardX import SummaryWriter
 
 WRITER = SummaryWriter()
