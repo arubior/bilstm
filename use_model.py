@@ -25,7 +25,7 @@ WRITER = SummaryWriter()
 # DATA LOADER
 # ~~~~~~~~~~~
 
-itr = {'train': ImageTransforms(305, 5, 299),
+itr = {'train': ImageTransforms(305, 5, 299, 0.5),
        'test': ImageTransforms(299)}
 
 ttr = TextTransforms()
@@ -143,7 +143,7 @@ def lstm_losses(packed_feats, hidden, batch_first, cuda):
         bw_seq_feats = torch.cat((start_stop, feats[i, :seq_len, :]))
         bw_seq_hiddens = hidden[i, :seq_len, hidden.size()[2] // 2:]  # Get backward hidden state
 
-        for j in xrange(seq_len):
+        for j in range(seq_len):
             fw_denom = torch.cat([torch.exp(torch.mm(fw_seq_hiddens[j].unsqueeze(0),
                                                      feats[k].permute(1, 0))).sum()
                                   for k in range(len(seq_lens))]).sum()
@@ -176,14 +176,14 @@ def main():
 
     batch_first = True
 
-    batch_size = 2
+    batch_size = 10
     input_dim = 512
     hidden_dim = 512
     margin = 0.2
     tic = time.time()
     inception_emb = models.inception_v3(pretrained=True)
     inception_emb.fc = nn.Linear(2048, 512)
-    print "inception loading took %.2f secs" % (time.time() - tic)
+    print("inception loading took %.2f secs" % (time.time() - tic))
 
     tic = time.time()
     model = BiLSTM(input_dim, hidden_dim, batch_first)
@@ -195,7 +195,7 @@ def main():
         inception_emb = inception_emb.cuda()
         model = nn.DataParallel(model, device_ids=args.multigpu)
         inception_emb = nn.DataParallel(inception_emb, device_ids=args.multigpu)
-    print "models to cuda took %.2f secs" % (time.time() - tic)
+    print("models to cuda took %.2f secs" % (time.time() - tic))
 
     img_dir = 'data/images'
     json_dir = 'data/label'
@@ -209,18 +209,18 @@ def main():
                                          img_transform=img_transforms[x],
                                          txt_transform=txt_transforms[x])
                       for x in ['train', 'test', 'val']}
-    print "image_datasets took %.2f secs" % (time.time() - tic)
+    print("image_datasets took %.2f secs" % (time.time() - tic))
 
     tic = time.time()
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=batch_size,
                                                   shuffle=True, num_workers=4,
                                                   collate_fn=collate_seq)
                    for x in ['train', 'test', 'val']}
-    print "dataloaders took %.2f secs" % (time.time() - tic)
+    print("dataloaders took %.2f secs" % (time.time() - tic))
 
     tic = time.time()
     optimizer = optim.SGD(model.parameters(), lr=0.2, weight_decay=1e-4)
-    print "optimizer took %.2f secs" % (time.time() - tic)
+    print("optimizer took %.2f secs" % (time.time() - tic))
 
     numepochs = 200
     tic = time.time()
@@ -229,7 +229,6 @@ def main():
             # Clear gradients, reset hidden state.
             tic = time.time()
             model.zero_grad()
-            print "zero_grad took %.2f secs" % (time.time() - tic)
             hidden = model.init_hidden(batch_size)
             if args.cuda:
                 hidden = (hidden[0].cuda(), hidden[1].cuda())
@@ -242,10 +241,11 @@ def main():
             fw_loss, bw_loss = lstm_losses(packed_batch, out, batch_first, args.cuda)
             loss = fw_loss + bw_loss
             WRITER.add_scalar('data/loss', loss.data[0], i_batch)
-            print [len(b['images']) for b in batch]
+            print([len(b['images']) for b in batch])
             loss.backward()
-            print "Batch %d" % i_batch
+            print("Batch %d" % i_batch)
             optimizer.step()
+            print("batch took %.4f secs" % (time.time() - tic))
 
             # loss = model.ContrastiveLoss(margin)
 
