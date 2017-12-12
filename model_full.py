@@ -67,7 +67,9 @@ class FullBiLSTM(nn.Module):
         """Create a packed input of sequences for a RNN.
 
         Args:
-            - feats: features from images.
+            - feats: torch.Tensor with data features (N imgs x feat_dim).
+            - seq_lens: sequence lengths.
+            - lookup_table: list of image indices from seqs2batch.
             - data: list (with length batch_size) of sequences of images (shaped seq_len x img_dim)
 
         Returns:
