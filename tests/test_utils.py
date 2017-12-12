@@ -31,7 +31,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(resized_img.size, (20, 20))
 
         rotated_img = img_trf.random_rotation(img)
-        self.assertFalse(rotated_img, img)
+        self.assertNotEqual(rotated_img, img)
 
         croped_img = img_trf.random_crop(img)
         self.assertEqual(croped_img.size, (20, 20))
@@ -47,7 +47,7 @@ class TestUtils(unittest.TestCase):
 
         norm_text = txt_trf.normalize(text)
         self.assertNotEqual(text, norm_text)
-        self.assertEqual(sum([str(n) in text for n in range(10)]), 0)
+        self.assertEqual(sum([str(n) in norm_text for n in range(10)]), 0)
         self.assertEqual(sum([l.isupper() for l in norm_text]), 0)
 
         del_text = txt_trf.random_delete(text)

@@ -26,7 +26,7 @@ class FullBiLSTM(nn.Module):
         self.hidden_dim = hidden_dim
         self.batch_first = batch_first
         self.cnn = models.inception_v3(pretrained=True)
-        self.cnn.fc = nn.Linear(2048, 512)
+        self.cnn.fc = nn.Linear(2048, input_dim)
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1,
                             batch_first=self.batch_first, bidirectional=True,
                             dropout=dropout)
