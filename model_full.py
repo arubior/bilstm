@@ -3,12 +3,9 @@
 # pylint: disable=E1101
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.autograd as autograd
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pack_padded_sequence
 import torchvision.models as models
-from utils import seqs2batch
-
 
 
 class FullBiLSTM(nn.Module):
@@ -34,7 +31,7 @@ class FullBiLSTM(nn.Module):
                             batch_first=self.batch_first, bidirectional=True,
                             dropout=dropout)
 
-    def forward(self, data, hidden):
+    def forward(self, images, seq_lens, lookup_table, hidden):
         """Do a forward pass.
 
         The forward pass implies:
@@ -44,18 +41,22 @@ class FullBiLSTM(nn.Module):
             - Doing the forward pass through the LSTM.
 
         Args:
-            - data: list of dictionaries with images and texts.
+            - images: autograd Variable with the images of the batch.
+            - seq_lens: torch tensor with a list of the sequence lengths.
+            - lookup_table: list of lists with indices of the images.
             - hidden: hidden variables for the LSTM.
 
+        Returns:
+            - features extracted from the CNN (PackedSequence)
+            - (out, hidden): outputs and hidden states of the LSTM.
+
         """
-        # First, get a list of images from sequences:
-        images, seq_lens, lookup_table = seqs2batch(data)
         # Then, get their features:
-        feats, _ = self.cnn(autograd.Variable(images))
+        feats, _ = self.cnn(images)
         # Pack the sequences:
         packed_feats = self.create_packed_seq(feats, seq_lens, lookup_table)
         # Forward the sequence through the LSTM:
-        return self.lstm(packed_feats, hidden)
+        return packed_feats, self.lstm(packed_feats, hidden)
 
     def init_hidden(self, batch_size):
         """Initialize the hidden state and cell state."""
@@ -75,11 +76,12 @@ class FullBiLSTM(nn.Module):
 
         """
         # Manually create the padded sequence.
-        if self.cuda:
+        if feats.is_cuda:
             seqs = autograd.Variable(torch.zeros((len(seq_lens), max(seq_lens),
                                                   feats.size()[1]))).cuda()
         else:
             seqs = autograd.Variable(torch.zeros((len(seq_lens), max(seq_lens), feats.size()[1])))
+
         for i, seq_len in enumerate(seq_lens):  # Iterate over batch
             for j in range(max(seq_lens)):  # Iterate over sequence
                 if j < seq_len:

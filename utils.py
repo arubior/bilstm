@@ -30,4 +30,3 @@ def seqs2batch(data):
         lookup_table.append(seq_lookup)
 
     return images, seq_lens, lookup_table
-

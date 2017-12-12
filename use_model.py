@@ -10,7 +10,8 @@ import torch.autograd as autograd
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torchvision
 import torchvision.models as models
-from model import BiLSTM
+from utils import seqs2batch
+from model_full import FullBiLSTM
 from losses import LSTMLosses, SBContrastiveLoss
 from transforms import ImageTransforms, TextTransforms
 from datasets import PolyvoreDataset
@@ -62,20 +63,21 @@ def main():
     hidden_dim = 512
     margin = 0.2
     tic = time.time()
-    inception_emb = models.inception_v3(pretrained=True)
-    inception_emb.fc = nn.Linear(2048, 512)
-    print("inception loading took %.2f secs" % (time.time() - tic))
+    # inception_emb = models.inception_v3(pretrained=True)
+    # inception_emb.fc = nn.Linear(2048, 512)
+    # print("inception loading took %.2f secs" % (time.time() - tic))
 
     tic = time.time()
-    model = BiLSTM(input_dim, hidden_dim, batch_first, dropout=0.7)
+    # model = BiLSTM(input_dim, hidden_dim, batch_first, dropout=0.7)
+    model = FullBiLSTM(input_dim, hidden_dim, batch_first, dropout=0.7)
     if args.cuda:
-        model = model.cuda()
-        inception_emb = inception_emb.cuda()
+        model.cuda()
+        # inception_emb.cuda()
     if args.multigpu:
-        model = model.cuda()
-        inception_emb = inception_emb.cuda()
+        model.cuda()
+        # inception_emb.cuda()
         model = nn.DataParallel(model, device_ids=args.multigpu)
-        inception_emb = nn.DataParallel(inception_emb, device_ids=args.multigpu)
+        # inception_emb = nn.DataParallel(inception_emb, device_ids=args.multigpu)
     print("models to cuda took %.2f secs" % (time.time() - tic))
 
     img_dir = 'data/images'
@@ -113,19 +115,22 @@ def main():
             # Clear gradients, reset hidden state.
             model.zero_grad()
             hidden = model.init_hidden(batch_size)
+
+            # Get a list of images and texts from sequences:
+            images, seq_lens, lookup_table = seqs2batch(batch)
+
             if args.cuda:
                 hidden = (hidden[0].cuda(), hidden[1].cuda())
+                images = autograd.Variable(images).cuda()
+            else:
+                images = autograd.Variable(images)
 
-            # Prepare data
-            packed_batch = create_packed_seq(inception_emb, batch,
-                                             args.cuda, batch_first=batch_first)
-            out, hidden = model.forward(packed_batch, hidden)
+            packed_batch, (out, hidden) = model.forward(images, seq_lens, lookup_table, hidden)
             out, _ = pad_packed_sequence(out, batch_first=batch_first)  # 2nd output: seq lengths
             fw_loss, bw_loss = criterion(packed_batch, out)
             # cont_loss = contrastive_criterion()
             loss = fw_loss + bw_loss  # + cont_loss
 
-            # loss = SBContrastiveLoss(margin)
             loss.backward()
             optimizer.step()
 
