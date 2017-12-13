@@ -104,18 +104,17 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
                    for x in ['train', 'test', 'val']}
 
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    scheduler = StepLR(optimizer, 2, 0.5)
     criterion = LSTMLosses(batch_first, cuda)
     contrastive_criterion = SBContrastiveLoss(margin)
 
-    return model, dataloaders, scheduler, criterion
+    return model, dataloaders, optimizer, criterion
 
 
 def train(train_params, batch, n_iter, cuda, batch_first):
     """Train the model.
 
     """
-    model, criterion, scheduler = train_params
+    model, criterion, optimizer = train_params
 
     tic = time.time()
     # Clear gradients, reset hidden state.
@@ -138,7 +137,7 @@ def train(train_params, batch, n_iter, cuda, batch_first):
     loss = fw_loss + bw_loss  # + cont_loss
 
     loss.backward()
-    scheduler.step()
+    optimizer.step()
 
     WRITER.add_scalar('data/loss', loss.data[0], n_iter)
     WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
@@ -165,7 +164,7 @@ def main():
     parser.set_defaults(batch_first=True)
     args = parser.parse_args()
 
-    model, dataloaders, scheduler, criterion = config(
+    model, dataloaders, optimizer, criterion = config(
         net_params=[512, 512, 0.2],
         data_params=['data/images', 'data/label',
                      {'train': 'train_no_dup.json',
@@ -175,13 +174,17 @@ def main():
         batch_params=[args.batch_size, args.batch_first],
         cuda_params=[args.cuda, args.multigpu])
 
+    scheduler = StepLR(optimizer, 2, 0.5)
+
     numepochs = 20
     n_iter = 0
     tic = time.time()
     for epoch in range(numepochs):
         for _, batch in enumerate(dataloaders['train']):
 
-            train([model, criterion, scheduler],
+            scheduler.step()
+
+            train([model, criterion, optimizer],
                   batch, n_iter, args.cuda, args.batch_first)
 
             n_iter += 1
