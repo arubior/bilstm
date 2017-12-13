@@ -8,6 +8,7 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import StepLR
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pad_packed_sequence
 import torchvision
@@ -33,6 +34,7 @@ TXT_TRF = TextTransforms()
 IMG_TRAIN_TF = lambda x: torchvision.transforms.ToTensor()(IMG_TRF['train'].random_crop(
     IMG_TRF['train'].random_rotation(IMG_TRF['train'].random_horizontal_flip(
         IMG_TRF['train'].resize(x)))))
+
 IMG_TEST_VAL_TF = lambda x: torchvision.transforms.ToTensor()(IMG_TRF['test'].resize(x))
 
 TXT_TRAIN_TF = lambda x: TXT_TRF.random_delete(TXT_TRF.normalize(x))
@@ -74,7 +76,7 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
     Returns:
         - model: pytorch model to train
         - dataloaders: data iterators
-        - optimizer: optimizer function to train
+        - scheduler: scheduler of the optimizer function to train
         - criterion: loss equation to train
 
     """
@@ -102,17 +104,18 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
                    for x in ['train', 'test', 'val']}
 
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    scheduler = StepLR(optimizer, 2, 0.5)
     criterion = LSTMLosses(batch_first, cuda)
     contrastive_criterion = SBContrastiveLoss(margin)
 
-    return model, dataloaders, optimizer, criterion
+    return model, dataloaders, scheduler, criterion
 
 
 def train(train_params, batch, n_iter, cuda, batch_first):
     """Train the model.
 
     """
-    model, criterion, optimizer = train_params
+    model, criterion, scheduler = train_params
 
     tic = time.time()
     # Clear gradients, reset hidden state.
@@ -135,7 +138,7 @@ def train(train_params, batch, n_iter, cuda, batch_first):
     loss = fw_loss + bw_loss  # + cont_loss
 
     loss.backward()
-    optimizer.step()
+    scheduler.step()
 
     WRITER.add_scalar('data/loss', loss.data[0], n_iter)
     WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
@@ -162,7 +165,7 @@ def main():
     parser.set_defaults(batch_first=True)
     args = parser.parse_args()
 
-    model, dataloaders, optimizer, criterion = config(
+    model, dataloaders, scheduler, criterion = config(
         net_params=[512, 512, 0.2],
         data_params=['data/images', 'data/label',
                      {'train': 'train_no_dup.json',
@@ -178,7 +181,9 @@ def main():
     for epoch in range(numepochs):
         for _, batch in enumerate(dataloaders['train']):
 
-            train([model, criterion, optimizer],
+            import epdb; epdb.set_trace()
+
+            train([model, criterion, scheduler],
                   batch, n_iter, args.cuda, args.batch_first)
 
             n_iter += 1
