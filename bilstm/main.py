@@ -110,45 +110,57 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
     return model, dataloaders, optimizer, criterion
 
 
-def train(train_params, batch, n_iter, cuda, batch_first):
+def train(train_params, dataloaders, cuda, batch_first, numepochs=10):
     """Train the model.
 
     """
-    model, criterion, optimizer = train_params
+    model, criterion, optimizer, scheduler = train_params
 
+    n_iter = 0
     tic = time.time()
-    # Clear gradients, reset hidden state.
-    model.zero_grad()
-    hidden = model.init_hidden(len(batch))
+    for epoch in range(numepochs):
+        for batch in dataloaders['train']:
 
-    # Get a list of images and texts from sequences:
-    images, seq_lens, lookup_table = seqs2batch(batch)
+            scheduler.step()
 
-    if cuda:
-        hidden = (hidden[0].cuda(), hidden[1].cuda())
-        images = autograd.Variable(images).cuda()
-    else:
-        images = autograd.Variable(images)
 
-    packed_batch, (out, hidden) = model.forward(images, seq_lens, lookup_table, hidden)
-    out, _ = pad_packed_sequence(out, batch_first=batch_first)
-    fw_loss, bw_loss = criterion(packed_batch, out)
-    # cont_loss = contrastive_criterion()
-    loss = fw_loss + bw_loss  # + cont_loss
+            tic = time.time()
+            # Clear gradients, reset hidden state.
+            model.zero_grad()
+            hidden = model.init_hidden(len(batch))
 
-    loss.backward()
-    optimizer.step()
+            # Get a list of images and texts from sequences:
+            images, seq_lens, lookup_table = seqs2batch(batch)
 
-    WRITER.add_scalar('data/loss', loss.data[0], n_iter)
-    WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
-    WRITER.add_scalar('data/loss_BW', bw_loss.data[0], n_iter)
+            if cuda:
+                hidden = (hidden[0].cuda(), hidden[1].cuda())
+                images = autograd.Variable(images).cuda()
+            else:
+                images = autograd.Variable(images)
 
-    print("\033[1;31mBatch took %.2f secs\033[0m" % (time.time() - tic))
-    print("\033[1;36m----------------------\033[0m")
-    print("\033[0;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" %
-          (fw_loss.data[0], bw_loss.data[0]))
-    print("\033[0;4;92mTOTAL LOSS: %.2f\033[0m" % loss.data[0])
-    print("\033[1;36m----------------------\033[0m")
+            packed_batch, (out, hidden) = model.forward(images, seq_lens, lookup_table, hidden)
+            out, _ = pad_packed_sequence(out, batch_first=batch_first)
+            fw_loss, bw_loss = criterion(packed_batch, out)
+            # cont_loss = contrastive_criterion()
+            loss = fw_loss + bw_loss  # + cont_loss
+
+            loss.backward()
+            optimizer.step()
+
+            WRITER.add_scalar('data/loss', loss.data[0], n_iter)
+            WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
+            WRITER.add_scalar('data/loss_BW', bw_loss.data[0], n_iter)
+
+            print("\033[1;31mBatch %d took %.2f secs\033[0m" % (n_iter, time.time() - tic))
+            print("\033[1;36m----------------------\033[0m")
+            print("\033[0;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" %
+                  (fw_loss.data[0], bw_loss.data[0]))
+            print("\033[0;4;92mTOTAL LOSS: %.2f\033[0m" % loss.data[0])
+            print("\033[1;36m----------------------\033[0m")
+
+            n_iter += 1
+
+        print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))
 
 
 def main():
@@ -176,20 +188,8 @@ def main():
 
     scheduler = StepLR(optimizer, 2, 0.5)
 
-    numepochs = 20
-    n_iter = 0
-    tic = time.time()
-    for epoch in range(numepochs):
-        for _, batch in enumerate(dataloaders['train']):
-
-            scheduler.step()
-
-            train([model, criterion, optimizer],
-                  batch, n_iter, args.cuda, args.batch_first)
-
-            n_iter += 1
-
-        print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))
+    train([model, criterion, optimizer, scheduler],
+          dataloaders, args.cuda, args.batch_first)
 
 
 if __name__ == '__main__':
