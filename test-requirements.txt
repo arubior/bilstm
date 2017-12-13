@@ -1,0 +1,9 @@
+pytest
+mock
+pytest-cov
+pylint==1.7.4
+pycodestyle
+pydocstyle
+coverage
+sphinx
+awscli
