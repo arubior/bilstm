@@ -181,8 +181,6 @@ def main():
     for epoch in range(numepochs):
         for _, batch in enumerate(dataloaders['train']):
 
-            import epdb; epdb.set_trace()
-
             train([model, criterion, scheduler],
                   batch, n_iter, args.cuda, args.batch_first)
 
