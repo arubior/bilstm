@@ -1,0 +1,9 @@
+--extra-index-url https://pypi.fury.io/QztVpmz-4cqE1bW57zp6/wideeyes/ # SECRET, do not publish this outside WE.
+http://download.pytorch.org/whl/cu75/torch-0.2.0.post3-cp27-cp27mu-manylinux1_x86_64.whl
+numpy>=1.13.3
+torchvision
+collections
+nltk
+PIL
+epdb
+tensorboardX

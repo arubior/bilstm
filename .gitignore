@@ -1,5 +1,7 @@
+.*
 *.pyc
 *.swp
 *.json
+*.xml
 dataset
 runs
