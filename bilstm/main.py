@@ -59,6 +59,7 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
             input_dimension for LSTM (int)
             output_dimension for LSTM (int)
             margin for contrastive loss (float)
+            load_path for loading weights (str) (None by default)
         - data_params: list containing:
             path to the directory where images are (string)
             path to the directory wher jsons are (string)
@@ -80,13 +81,16 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
         - criterion: loss equation to train
 
     """
-    input_dim, hidden_dim, margin = net_params
+    input_dim, hidden_dim, margin, load_path = net_params
     img_dir, json_dir, json_files = data_params
     learning_rate, weight_decay = opt_params
     batch_size, batch_first = batch_params
     cuda, multigpu = cuda_params
 
     model = FullBiLSTM(input_dim, hidden_dim, batch_first, dropout=0.7)
+    if load_path is not None:
+        print("Loading weights from %s" % load_path)
+        model.load_state_dict(torch.load(load_path))
     if cuda:
         print("Switching model to gpu")
         model.cuda()
@@ -107,14 +111,15 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
     criterion = LSTMLosses(batch_first, cuda)
     contrastive_criterion = SBContrastiveLoss(margin)
 
-    return model, dataloaders, optimizer, criterion
+    return model, dataloaders, optimizer, criterion, contrastive_criterion
 
 
-def train(train_params, dataloaders, cuda, batch_first, numepochs=10):
+def train(train_params, dataloaders, cuda, batch_first, epoch_params):
     """Train the model.
 
     """
-    model, criterion, optimizer, scheduler = train_params
+    model, criterion, contrastive_criterion, optimizer, scheduler = train_params
+    numepochs, nsave, save_path = epoch_params
 
     n_iter = 0
     tic = time.time()
@@ -161,6 +166,10 @@ def train(train_params, dataloaders, cuda, batch_first, numepochs=10):
 
             n_iter += 1
 
+        if not epoch % nsave:
+            print("Epoch %d (%d iters) -- Saving model in %s" % (epoch, n_iter, save_path))
+            torch.save(model.state_dict(), "%s_%d" % (save_path, n_iter))
+
         print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))
 
 
@@ -168,6 +177,10 @@ def main():
     """Forward sequences."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', '-bs', type=int, help='batch size', default=10)
+    parser.add_argument('--save_path', '-sp', type=str, help='path to save the model',
+                        default='models/model.pth')
+    parser.add_argument('--load_path', '-mp', type=str, help='path to load the model',
+                        default=None)
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
     parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
     parser.add_argument('--batch_first', dest='batch_first', action='store_true')
@@ -177,8 +190,8 @@ def main():
     parser.set_defaults(batch_first=True)
     args = parser.parse_args()
 
-    model, dataloaders, optimizer, criterion = config(
-        net_params=[512, 512, 0.2],
+    model, dataloaders, optimizer, criterion, contrastive_criterion = config(
+        net_params=[512, 512, 0.2, args.load_path],
         data_params=['data/images', 'data/label',
                      {'train': 'train_no_dup.json',
                       'test': 'test_no_dup.json',
@@ -190,8 +203,9 @@ def main():
 
     scheduler = StepLR(optimizer, 2, 0.5)
 
-    train([model, criterion, optimizer, scheduler],
-          dataloaders, args.cuda, args.batch_first)
+    train([model, criterion, contrastive_criterion, optimizer, scheduler],
+          dataloaders, args.cuda, args.batch_first,
+          [20, 3, args.save_path])
 
 
 if __name__ == '__main__':
