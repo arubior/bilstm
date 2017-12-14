@@ -119,9 +119,11 @@ def train(train_params, dataloaders, cuda, batch_first, numepochs=10):
     n_iter = 0
     tic = time.time()
     for epoch in range(numepochs):
-        for batch in dataloaders['train']:
+        print("Epoch %d - lr = %.4f" % (epoch, optimizer.param_groups[0]['lr']))
+        for batch in dataloaders['val']:
 
             scheduler.step()
+            import epdb; epdb.set_trace()
 
 
             tic = time.time()
@@ -151,12 +153,12 @@ def train(train_params, dataloaders, cuda, batch_first, numepochs=10):
             WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
             WRITER.add_scalar('data/loss_BW', bw_loss.data[0], n_iter)
 
-            print("\033[1;31mBatch %d took %.2f secs\033[0m" % (n_iter, time.time() - tic))
-            print("\033[1;36m----------------------\033[0m")
-            print("\033[0;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" %
-                  (fw_loss.data[0], bw_loss.data[0]))
-            print("\033[0;4;92mTOTAL LOSS: %.2f\033[0m" % loss.data[0])
-            print("\033[1;36m----------------------\033[0m")
+            # print("\033[1;31mBatch %d took %.2f secs\033[0m" % (n_iter, time.time() - tic))
+            # print("\033[1;36m----------------------\033[0m")
+            # print("\033[0;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" %
+                  # (fw_loss.data[0], bw_loss.data[0]))
+            # print("\033[0;4;92mTOTAL LOSS: %.2f\033[0m" % loss.data[0])
+            # print("\033[1;36m----------------------\033[0m")
 
             n_iter += 1
 
