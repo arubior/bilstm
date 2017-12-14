@@ -9,36 +9,85 @@ import numpy as np
 from nltk.stem import WordNetLemmatizer
 
 
-def seqs2batch(data):
-    """Get a list of images from a list of sequences.
+def seqs2batch(data, word_to_ix):
+    """Get a list of images and texts from a list of sequences.
 
     Args:
-        data: list of sequences (shaped batch_size x seq_len, with seq_len variable).
+        - data: list of sequences (shaped batch_size x seq_len, with seq_len variable).
+        - word_to_ix: dictionary. Keys are unique words, values are unique indices.
 
     Returns:
-        images: list of images.
-        seq_lens: list of sequence lengths.
-        lookup_table: list (shaped batch_size x seq_len, with seq_len variable) containing
-            the indices of images in the image list.
+        - images: torch.Tensor of images.
+        - texts: torch.Tensor of stacked one-hot encoding matrices for texts (M words x
+                                                                              N vocab_size).
+        - seq_lens: list of sequence lengths.
+        - im_lookup_table: list (shaped batch_size x seq_len, with seq_len variable) containing
+          the indices of images in the image list.
+        - txt_lookup_table: list (shaped batch_size x seq_len x text_len, with seq_len and
+          text_len variable) containing the indices of words in the text list.
 
     """
     # Get all inputs and keep the information about the sequence they belong to.
     images = torch.Tensor()
-    img_data = [i['images'] for i in data]
+    texts = torch.Tensor()
+    img_data, txt_data = zip([(i['images'], i['texts']) for i in data])
     seq_lens = torch.zeros(len(img_data)).int()
-    lookup_table = []
+    im_lookup_table = []
+    txt_lookup_table = []
     count = 0
-    for seq_tag, seq_imgs in enumerate(img_data):
-        seq_lookup = []
-        for img in seq_imgs:
+    word_count = 0
+    for seq_tag, (seq_imgs, seq_txts) in enumerate(zip(img_data, txt_data)):
+        im_seq_lookup = []
+        txt_seq_lookup = []
+        for img, txt in zip(seq_imgs, seq_txts):
             images = torch.cat((images, img.unsqueeze(0)))
-            seq_lookup.append(count)
+            texts = torch.cat((texts, get_one_hot(txt, word_to_ix).unsqueeze(0)))
+            im_seq_lookup.append(count)
+            txt_seq_lookup.append(range(word_count, word_count + len(txt.split())))
             count += 1
+            word_count += len(txt.split())
             seq_lens[seq_tag] += 1
-        lookup_table.append(seq_lookup)
+        im_lookup_table.append(im_seq_lookup)
+        txt_lookup_table.append(txt_seq_lookup)
 
-    return images, seq_lens, lookup_table
+    return images, texts, seq_lens, im_lookup_table, txt_lookup_table
 
+
+def create_vocab(texts):
+    """Create vocabulary for one-hot word encodings.
+
+    Args:
+        - texts: list of sentences.
+
+    Returns:
+        - word_to_ix: dictionary. Keys are unique words, values are unique indices.
+
+    """
+    idx = 0
+    word_to_ix = dict()
+    for word in ' '.join(texts).split():
+        if word not in word_to_ix:
+            word_to_ix[word] = idx
+            idx += 1
+    return word_to_ix
+
+
+def get_one_hot(text, word_to_ix):
+    """Get a matrix of one-hot encoding vectors for all words in a text.
+
+    Args:
+        - text: (str)
+        - word_to_ix: dictionary. Keys are unique words, values are unique indices.
+
+    Returns:
+        - encodings: (torch.Tensor) matrix with size ((M words) x (vocab. size))
+
+    """
+    encodings = torch.zeros(len(text.split()), len(word_to_ix))
+    for i, word in enumerate(text.split()):
+        encodings[i, word_to_ix[word]] = 1
+
+    return encodings
 
 class ImageTransforms(object):
     """Custom image transformations.

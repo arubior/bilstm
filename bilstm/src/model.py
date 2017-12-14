@@ -19,19 +19,21 @@ class FullBiLSTM(nn.Module):
 
     """
 
-    def __init__(self, input_dim, hidden_dim, batch_first=False, dropout=0):
+    def __init__(self, input_dim, hidden_dim, vocab_size, batch_first=False, dropout=0):
         """Create the network."""
         super(FullBiLSTM, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.batch_first = batch_first
+        self.vocab_size = vocab_size
+        self.textn = nn.Linear(vocab_size, input_dim)
         self.cnn = models.inception_v3(pretrained=True)
         self.cnn.fc = nn.Linear(2048, input_dim)
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1,
                             batch_first=self.batch_first, bidirectional=True,
                             dropout=dropout)
 
-    def forward(self, images, seq_lens, lookup_table, hidden):
+    def forward(self, images, seq_lens, lookup_table, hidden, texts):
         """Do a forward pass.
 
         The forward pass implies:
@@ -45,18 +47,23 @@ class FullBiLSTM(nn.Module):
             - seq_lens: torch tensor with a list of the sequence lengths.
             - lookup_table: list of lists with indices of the images.
             - hidden: hidden variables for the LSTM.
+            - texts: autograd Variable with a list of one-hot encoding matrices for
+                texts (M words x N vocab_size).
 
         Returns:
-            - features extracted from the CNN (PackedSequence)
+            - features extracted from the CNN (PackedSequence).
+            - (im_feats, txt_feats): network features for images and texts in the batch.
             - (out, hidden): outputs and hidden states of the LSTM.
 
         """
-        # Then, get their features:
-        feats, _ = self.cnn(images)
+        # Get text features:
+        txt_feats = self.textn(texts)
+        # Get image features:
+        im_feats, _ = self.cnn(images)
         # Pack the sequences:
-        packed_feats = self.create_packed_seq(feats, seq_lens, lookup_table)
+        packed_feats = self.create_packed_seq(im_feats, seq_lens, lookup_table)
         # Forward the sequence through the LSTM:
-        return packed_feats, self.lstm(packed_feats, hidden)
+        return packed_feats, (im_feats, txt_feats), self.lstm(packed_feats, hidden)
 
     def init_hidden(self, batch_size):
         """Initialize the hidden state and cell state."""
