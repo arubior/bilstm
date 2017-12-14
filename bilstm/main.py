@@ -185,13 +185,9 @@ def main():
     parser.add_argument('--batch_size', '-bs', type=int, help='batch size', default=10)
     parser.add_argument('--save_path', '-sp', type=str, help='path to save the model',
                         default='models/model.pth')
-    parser.add_argument('--vocab', '-v', type=str, help='path to the vocabulary json',
-                        default='models/vocab.json')
     parser.add_argument('--load_path', '-mp', type=str, help='path to load the model',
                         default=None)
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
-    parser.add_argument('--create_vocab', '-cv', dest='create_vocab', help='create vocabulary',
-                        action='store_true')
     parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
     parser.add_argument('--batch_first', dest='batch_first', action='store_true')
     parser.add_argument('--no-batch_first', dest='batch_first', action='store_false')
@@ -213,14 +209,11 @@ def main():
         cuda_params=[args.cuda, args.multigpu])
     print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])
 
-    if args.create_vocab:
-        tic = time.time()
-        print("Reading all texts to create the vocabulary")
-        all_texts = [t['name'] for d in json.load(open(filenames['train'])) for t in d['items']]
-        print("Reading all texts took %.2fsecs" % (time.time() - tic))
-        vocab = create_vocab(all_texts)
-        json.dump(vocab, open(args.vocab))
-    vocab = json.load(open(args.vocab))
+    tic = time.time()
+    print("Reading all texts and creating the vocabulary")
+    all_texts = [t['name'] for d in json.load(open(filenames['train'])) for t in d['items']]
+    vocab = create_vocab(all_texts)
+    print("Vocabulary creation took %.2fsecs" % (time.time() - tic))
 
     scheduler = StepLR(optimizer, 2, 0.5)
 
