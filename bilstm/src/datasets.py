@@ -41,7 +41,7 @@ class PolyvoreDataset(Dataset):
         set_id = self.data[idx]['set_id']
         items = self.data[idx]['items']
         images = []
-        # texts = []
+        texts = []
         for i in items:
             img = Image.open(os.path.join(self.img_dir, set_id, '%s.jpg' % i['index']))
             try:
@@ -53,16 +53,15 @@ class PolyvoreDataset(Dataset):
                 if np.any(np.array(img.size) == 1):
                     continue
             images.append(img)
-            # texts.append(i['name'])
+            texts.append(i['name'])
 
         if self.img_transform:
             images = [self.img_transform(image) for image in images]
 
-        # if self.txt_transform:
-            # texts = [self.txt_transform(t) for t in texts]
+        if self.txt_transform:
+            texts = [self.txt_transform(t) for t in texts]
 
-        # return {'images': images, 'texts': texts}
-        return {'images': images}
+        return {'images': images, 'texts': texts}
 
 
 def collate_seq(batch):

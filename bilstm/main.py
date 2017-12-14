@@ -4,6 +4,7 @@
 # pylint: disable=W0403
 import os
 import time
+import json
 import argparse
 import torch
 import torch.nn as nn
@@ -12,7 +13,7 @@ from torch.optim.lr_scheduler import StepLR
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pad_packed_sequence
 import torchvision
-from src.utils import seqs2batch, ImageTransforms, TextTransforms
+from src.utils import seqs2batch, ImageTransforms, TextTransforms, create_vocab
 from src.model import FullBiLSTM
 from src.losses import LSTMLosses, SBContrastiveLoss
 from src.datasets import PolyvoreDataset
@@ -118,7 +119,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
     """Train the model.
 
     """
-    model, criterion, contrastive_criterion, optimizer, scheduler = train_params
+    model, criterion, contrastive_criterion, optimizer, scheduler, vocab = train_params
     numepochs, nsave, save_path = epoch_params
 
     n_iter = 0
@@ -136,7 +137,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             hidden = model.init_hidden(len(batch))
 
             # Get a list of images and texts from sequences:
-            images, seq_lens, lookup_table = seqs2batch(batch)
+            images, texts, seq_lens, im_lookup_table, txt_lookup_table= seqs2batch(batch, vocab)
 
             if cuda:
                 hidden = (hidden[0].cuda(), hidden[1].cuda())
@@ -144,7 +145,11 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             else:
                 images = autograd.Variable(images)
 
-            packed_batch, (out, hidden) = model.forward(images, seq_lens, lookup_table, hidden)
+            packed_batch, (im_feats, txt_feats), (out, hidden) = model.forward(images,
+                                                                               seq_lens,
+                                                                               im_lookup_table,
+                                                                               hidden,
+                                                                               texts)
             out, _ = pad_packed_sequence(out, batch_first=batch_first)
             fw_loss, bw_loss = criterion(packed_batch, out)
             # cont_loss = contrastive_criterion()
@@ -169,6 +174,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
         if not epoch % nsave:
             print("Epoch %d (%d iters) -- Saving model in %s" % (epoch, n_iter, save_path))
             torch.save(model.state_dict(), "%s_%d" % (save_path, n_iter))
+            evaluate(model, criterion)
 
         print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))
 
@@ -179,31 +185,46 @@ def main():
     parser.add_argument('--batch_size', '-bs', type=int, help='batch size', default=10)
     parser.add_argument('--save_path', '-sp', type=str, help='path to save the model',
                         default='models/model.pth')
+    parser.add_argument('--vocab', '-v', type=str, help='path to the vocabulary json',
+                        default='models/vocab.json')
     parser.add_argument('--load_path', '-mp', type=str, help='path to load the model',
                         default=None)
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
+    parser.add_argument('--create_vocab', '-cv', dest='create_vocab', help='create vocabulary',
+                        action='store_true')
     parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
     parser.add_argument('--batch_first', dest='batch_first', action='store_true')
     parser.add_argument('--no-batch_first', dest='batch_first', action='store_false')
     parser.add_argument('--multigpu', nargs='*', default=[], help='list of gpus to use')
     parser.set_defaults(cuda=True)
     parser.set_defaults(batch_first=True)
+    parser.set_defaults(create_vocab=False)
     args = parser.parse_args()
 
+    filenames = {'train': 'train_no_dup.json',
+                 'test': 'test_no_dup.json',
+                 'val': 'valid_no_dup.json'}
     model, dataloaders, optimizer, criterion, contrastive_criterion = config(
         net_params=[512, 512, 0.2, args.load_path],
         data_params=['data/images', 'data/label',
-                     {'train': 'train_no_dup.json',
-                      'test': 'test_no_dup.json',
-                      'val': 'valid_no_dup.json'}],
+                     filenames],
         opt_params=[0.2, 1e-4],
         batch_params=[args.batch_size, args.batch_first],
         cuda_params=[args.cuda, args.multigpu])
     print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])
 
+    if args.create_vocab:
+        tic = time.time()
+        print("Reading all texts to create the vocabulary")
+        all_texts = [t['name'] for d in json.load(open(filenames['train'])) for t in d['items']]
+        print("Reading all texts took %.2fsecs" % (time.time() - tic))
+        vocab = create_vocab(all_texts)
+        json.dump(vocab, open(args.vocab))
+    vocab = json.load(open(args.vocab))
+
     scheduler = StepLR(optimizer, 2, 0.5)
 
-    train([model, criterion, contrastive_criterion, optimizer, scheduler],
+    train([model, criterion, contrastive_criterion, optimizer, scheduler, vocab],
           dataloaders, args.cuda, args.batch_first,
           [20, 3, args.save_path])
 
