@@ -120,13 +120,12 @@ def train(train_params, dataloaders, cuda, batch_first, numepochs=10):
     tic = time.time()
     for epoch in range(numepochs):
         print("Epoch %d - lr = %.4f" % (epoch, optimizer.param_groups[0]['lr']))
-        for batch in dataloaders['val']:
-
-            scheduler.step()
-            import epdb; epdb.set_trace()
+        scheduler.step()
+        for batch in dataloaders['train']:
 
 
-            tic = time.time()
+
+            tic_b = time.time()
             # Clear gradients, reset hidden state.
             model.zero_grad()
             hidden = model.init_hidden(len(batch))
@@ -153,7 +152,7 @@ def train(train_params, dataloaders, cuda, batch_first, numepochs=10):
             WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
             WRITER.add_scalar('data/loss_BW', bw_loss.data[0], n_iter)
 
-            # print("\033[1;31mBatch %d took %.2f secs\033[0m" % (n_iter, time.time() - tic))
+            # print("\033[1;31mBatch %d took %.2f secs\033[0m" % (n_iter, time.time() - tic_b))
             # print("\033[1;36m----------------------\033[0m")
             # print("\033[0;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" %
                   # (fw_loss.data[0], bw_loss.data[0]))
@@ -187,6 +186,7 @@ def main():
         opt_params=[0.2, 1e-4],
         batch_params=[args.batch_size, args.batch_first],
         cuda_params=[args.cuda, args.multigpu])
+    print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])
 
     scheduler = StepLR(optimizer, 2, 0.5)
 
