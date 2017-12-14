@@ -60,6 +60,7 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
             input_dimension for LSTM (int)
             output_dimension for LSTM (int)
             margin for contrastive loss (float)
+            size of the vocabulary (int)
             load_path for loading weights (str) (None by default)
         - data_params: list containing:
             path to the directory where images are (string)
@@ -82,13 +83,13 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
         - criterion: loss equation to train
 
     """
-    input_dim, hidden_dim, margin, load_path = net_params
+    input_dim, hidden_dim, margin, vocab_size, load_path = net_params
     img_dir, json_dir, json_files = data_params
     learning_rate, weight_decay = opt_params
     batch_size, batch_first = batch_params
     cuda, multigpu = cuda_params
 
-    model = FullBiLSTM(input_dim, hidden_dim, batch_first, dropout=0.7)
+    model = FullBiLSTM(input_dim, hidden_dim, vocab_size, batch_first, dropout=0.7)
     if load_path is not None:
         print("Loading weights from %s" % load_path)
         model.load_state_dict(torch.load(load_path))
@@ -200,20 +201,22 @@ def main():
     filenames = {'train': 'train_no_dup.json',
                  'test': 'test_no_dup.json',
                  'val': 'valid_no_dup.json'}
+
+    tic = time.time()
+    print("Reading all texts and creating the vocabulary")
+    all_texts = [t['name'] for d in json.load(open(os.path.join('data/label',
+                                                   filenames['train']))) for t in d['items']]
+    vocab = create_vocab(all_texts)
+    print("Vocabulary creation took %.2fsecs" % (time.time() - tic))
+
     model, dataloaders, optimizer, criterion, contrastive_criterion = config(
-        net_params=[512, 512, 0.2, args.load_path],
+        net_params=[512, 512, 0.2, len(vocab), args.load_path],
         data_params=['data/images', 'data/label',
                      filenames],
         opt_params=[0.2, 1e-4],
         batch_params=[args.batch_size, args.batch_first],
         cuda_params=[args.cuda, args.multigpu])
     print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])
-
-    tic = time.time()
-    print("Reading all texts and creating the vocabulary")
-    all_texts = [t['name'] for d in json.load(open(filenames['train'])) for t in d['items']]
-    vocab = create_vocab(all_texts)
-    print("Vocabulary creation took %.2fsecs" % (time.time() - tic))
 
     scheduler = StepLR(optimizer, 2, 0.5)
 
