@@ -30,7 +30,9 @@ def seqs2batch(data, word_to_ix):
     # Get all inputs and keep the information about the sequence they belong to.
     images = torch.Tensor()
     texts = torch.Tensor()
-    img_data, txt_data = zip([(i['images'], i['texts']) for i in data])
+    # img_data, txt_data = zip([(i['images'], i['texts']) for i in data])
+    img_data = [i['images'] for i in data]
+    txt_data = [i['texts'] for i in data]
     seq_lens = torch.zeros(len(img_data)).int()
     im_lookup_table = []
     txt_lookup_table = []
@@ -41,7 +43,7 @@ def seqs2batch(data, word_to_ix):
         txt_seq_lookup = []
         for img, txt in zip(seq_imgs, seq_txts):
             images = torch.cat((images, img.unsqueeze(0)))
-            texts = torch.cat((texts, get_one_hot(txt, word_to_ix).unsqueeze(0)))
+            texts = torch.cat((texts, get_one_hot(txt, word_to_ix)))
             im_seq_lookup.append(count)
             txt_seq_lookup.append(range(word_count, word_count + len(txt.split())))
             count += 1
@@ -85,7 +87,10 @@ def get_one_hot(text, word_to_ix):
     """
     encodings = torch.zeros(len(text.split()), len(word_to_ix))
     for i, word in enumerate(text.split()):
-        encodings[i, word_to_ix[word]] = 1
+        try:
+            encodings[i, word_to_ix[word]] = 1
+        except KeyError:
+            print("Word %s not in vocabulary" % word)
 
     return encodings
 
