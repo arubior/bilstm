@@ -143,8 +143,10 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             if cuda:
                 hidden = (hidden[0].cuda(), hidden[1].cuda())
                 images = autograd.Variable(images).cuda()
+                texts = autograd.Variable(texts).cuda()
             else:
                 images = autograd.Variable(images)
+                texts = autograd.Variable(texts)
 
             packed_batch, (im_feats, txt_feats), (out, hidden) = model.forward(images,
                                                                                seq_lens,
@@ -204,7 +206,7 @@ def main():
 
     tic = time.time()
     print("Reading all texts and creating the vocabulary")
-    all_texts = [t['name'] for d in json.load(open(os.path.join('data/label',
+    all_texts = [TXT_TEST_VAL_TF(t['name']) for d in json.load(open(os.path.join('data/label',
                                                    filenames['train']))) for t in d['items']]
     vocab = create_vocab(all_texts)
     print("Vocabulary creation took %.2fsecs" % (time.time() - tic))
