@@ -151,12 +151,13 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             packed_batch, (im_feats, txt_feats), (out, hidden) = model.forward(images,
                                                                                seq_lens,
                                                                                im_lookup_table,
+                                                                               txt_lookup_table,
                                                                                hidden,
                                                                                texts)
             out, _ = pad_packed_sequence(out, batch_first=batch_first)
             fw_loss, bw_loss = criterion(packed_batch, out)
-            # cont_loss = contrastive_criterion()
-            loss = fw_loss + bw_loss  # + cont_loss
+            cont_loss = contrastive_criterion(im_feats, txt_feats)
+            loss = fw_loss + bw_loss + cont_loss
 
             loss.backward()
             optimizer.step()
@@ -209,7 +210,7 @@ def main():
     all_texts = [TXT_TEST_VAL_TF(t['name']) for d in json.load(open(os.path.join('data/label',
                                                    filenames['train']))) for t in d['items']]
     vocab = create_vocab(all_texts)
-    print("Vocabulary creation took %.2fsecs" % (time.time() - tic))
+    print("Vocabulary creation took %.2fsecs - %d words" % (time.time() - tic, len(vocab)))
 
     model, dataloaders, optimizer, criterion, contrastive_criterion = config(
         net_params=[512, 512, 0.2, len(vocab), args.load_path],

@@ -4,6 +4,7 @@ import random
 import torch
 import PIL
 import numpy as np
+import matplotlib.pyplot as plt
 # reload(sys)
 # sys.setdefaultencoding('utf8')
 from nltk.stem import WordNetLemmatizer
@@ -42,9 +43,17 @@ def seqs2batch(data, word_to_ix):
         im_seq_lookup = []
         txt_seq_lookup = []
         for img, txt in zip(seq_imgs, seq_txts):
+            text_to_append = range(word_count, word_count + len(txt.split()))
+            if len(text_to_append) == 0:
+                # IMAGES WITHOUT TEXT ARE NORMALLY IRRELEVANT.
+                # plt.imshow(img.permute(1, 2, 0).numpy())
+                # plt.show()
+                continue
             images = torch.cat((images, img.unsqueeze(0)))
             texts = torch.cat((texts, get_one_hot(txt, word_to_ix)))
             im_seq_lookup.append(count)
+            ###
+            ###
             txt_seq_lookup.append(range(word_count, word_count + len(txt.split())))
             count += 1
             word_count += len(txt.split())

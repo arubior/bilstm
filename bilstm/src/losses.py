@@ -93,7 +93,7 @@ class ContrastiveLoss(nn.Module):
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
 
-    def forward(self, output1, output2, label):
+    def forward(self, output1, output2, labels):
         """Compute the loss value.
 
         Args:
@@ -106,10 +106,10 @@ class ContrastiveLoss(nn.Module):
 
         """
         euclidean_distance = F.pairwise_distance(output1, output2)
-        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                      (label) * torch.pow(torch.clamp(self.margin -
-                                                                      euclidean_distance,
-                                                                      min=0.0), 2))
+        loss_contrastive = torch.mean((1 - labels).unsqueeze(1) * torch.pow(euclidean_distance, 2) +
+                                      (labels) * torch.pow(torch.clamp(self.margin -
+                                                                       euclidean_distance, min=0.0),
+                                                           2))
         return loss_contrastive
 
 
@@ -129,13 +129,14 @@ class SBContrastiveLoss(nn.Module):
         super(SBContrastiveLoss, self).__init__()
         self.margin = margin
 
-    def forward(self, desc1, desc2, label):
+    def forward(self, desc1, desc2):
         """Forward function.
 
         Args:
-            - desc1: descriptors of the first branch.
-            - desc2: descriptors of the second branch.
-            - labels: similarity labels (1 for similar items, 0 for dissimilar).
+            - desc1: (torch autograd Variable) descriptors of the first branch.
+            - desc2: (torch autograd Variable) descriptors of the second branch.
+            - labels: (torch autograd Variable) similarity labels (1 for similar items,
+              0 for dissimilar).
 
         Returns:
             autograd.Variable with the stochastic bidirectional contrastive loss value computed as:
@@ -146,9 +147,20 @@ class SBContrastiveLoss(nn.Module):
             non-matching desc1s for a given desc2.
 
         """
-        euclidean_distance = F.pairwise_distance(desc1, desc2)
-        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                      (label) * torch.pow(torch.clamp(self.margin -
-                                                                      euclidean_distance,
-                                                                      min=0.0), 2))
-        return loss_contrastive
+        loss = autograd.Variable(torch.Tensor([0]))
+        if desc1.is_cuda:
+            loss = loss.cuda()
+        same_dists = F.pairwise_distance(desc1, desc2)
+        for i, d1 in enumerate(desc1):
+            idxs = [x for x in range(desc2.size()[0]) if x != i]
+            diff_dists = F.pairwise_distance(d1.repeat(desc2.size()[0] - 1, 1), desc2[idxs, :])
+            loss += torch.sum(torch.max(self.margin - same_dists[i].repeat(desc2.size()[0] -1,
+                                                                           1) + diff_dists, 1)[0])
+
+        for j, d2 in enumerate(desc2):
+            idxs = [x for x in range(desc1.size()[0]) if x != j]
+            diff_dists = F.pairwise_distance(d2.repeat(desc1.size()[0] - 1, 1), desc1[idxs, :])
+            loss += torch.sum(torch.max(self.margin - same_dists[j].repeat(desc1.size()[0] -1,
+                                                                           1) + diff_dists, 1)[0])
+
+        return loss
