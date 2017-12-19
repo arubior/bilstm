@@ -57,17 +57,17 @@ class FullBiLSTM(nn.Module):
             - (out, hidden): outputs and hidden states of the LSTM.
 
         """
+        # Get image features:
+        im_feats, _ = self.cnn(images)
         # Get word features:
         word_feats = self.textn(texts)
         # Mean of word descriptors for each text:
         txt_feats = [torch.mean(word_feats[i[0]:i[-1] + 1], 0) for batch in txt_lookup_table for i in batch]
         txt_feats_matrix = autograd.Variable(torch.zeros(len(images), word_feats.size()[1]))
-        if txt_feats[0].is_cuda:
+        if im_feats[0].is_cuda:
             txt_feats_matrix = txt_feats_matrix.cuda()
         for i, feat in enumerate(txt_feats):
             txt_feats_matrix[i, :] = feat
-        # Get image features:
-        im_feats, _ = self.cnn(images)
         # Pack the sequences:
         packed_feats = self.create_packed_seq(im_feats, seq_lens, im_lookup_table)
         # Forward the sequence through the LSTM:

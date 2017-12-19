@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
+import torch.nn.functional as F
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pad_packed_sequence
 import torchvision
@@ -130,15 +131,13 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
         scheduler.step()
         for batch in dataloaders['train']:
 
-
-
             tic_b = time.time()
             # Clear gradients, reset hidden state.
             model.zero_grad()
             hidden = model.init_hidden(len(batch))
 
             # Get a list of images and texts from sequences:
-            images, texts, seq_lens, im_lookup_table, txt_lookup_table= seqs2batch(batch, vocab)
+            images, texts, seq_lens, im_lookup_table, txt_lookup_table = seqs2batch(batch, vocab)
 
             if cuda:
                 hidden = (hidden[0].cuda(), hidden[1].cuda())
@@ -154,17 +153,32 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
                                                                                txt_lookup_table,
                                                                                hidden,
                                                                                texts)
-            out, _ = pad_packed_sequence(out, batch_first=batch_first)
-            fw_loss, bw_loss = criterion(packed_batch, out)
+            # out, _ = pad_packed_sequence(out, batch_first=batch_first)
+            # fw_loss, bw_loss = criterion(packed_batch, out)
             cont_loss = contrastive_criterion(im_feats, txt_feats)
-            loss = fw_loss + bw_loss + cont_loss
-
-            loss.backward()
+            # loss = fw_loss + bw_loss + cont_loss
+            try:
+                # loss.backward()
+                cont_loss.backward()
+                # print("\033[1;31mloss %d: %.3f\033[0m" % (n_iter, loss.data[0]))
+                print("\033[1;31mcont_loss %d: %.3f\033[0m" % (n_iter, cont_loss.data[0]))
+                # print("\033[1;34mLSTM loss: %.3f ||| Contr. loss: %.3f\033[0m" % (loss.data[0] - cont_loss.data[0],
+                                                                                  # cont_loss.data[0]))
+                print("\033[1;31mBatch size = %d\033[0m" % len(batch))
+                for i, b in enumerate(batch):
+                    print("Seq %d - len = %d" % (i, len(b['texts'])))
+            except:
+                import epdb; epdb.set_trace()
             optimizer.step()
 
-            WRITER.add_scalar('data/loss', loss.data[0], n_iter)
-            WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
-            WRITER.add_scalar('data/loss_BW', bw_loss.data[0], n_iter)
+            dists = torch.sum(1 - F.cosine_similarity(im_feats, txt_feats))/im_feats.size()[0]
+            print("\033[1;31mdists: %.3f\033[0m" % dists.data[0])
+
+            # WRITER.add_scalar('data/loss', loss.data[0], n_iter)
+            WRITER.add_scalar('data/cont_loss', cont_loss.data[0], n_iter)
+            WRITER.add_scalar('data/pos_dists', dists.data[0], n_iter)
+            # WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
+            # WRITER.add_scalar('data/loss_BW', bw_loss.data[0], n_iter)
 
             # print("\033[1;31mBatch %d took %.2f secs\033[0m" % (n_iter, time.time() - tic_b))
             # print("\033[1;36m----------------------\033[0m")
