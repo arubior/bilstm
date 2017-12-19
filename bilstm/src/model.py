@@ -33,7 +33,7 @@ class FullBiLSTM(nn.Module):
                             batch_first=self.batch_first, bidirectional=True,
                             dropout=dropout)
 
-    def forward(self, images, seq_lens, lookup_table, hidden, texts):
+    def forward(self, images, seq_lens, im_lookup_table, txt_lookup_table, hidden, texts):
         """Do a forward pass.
 
         The forward pass implies:
@@ -45,7 +45,8 @@ class FullBiLSTM(nn.Module):
         Args:
             - images: autograd Variable with the images of the batch.
             - seq_lens: torch tensor with a list of the sequence lengths.
-            - lookup_table: list of lists with indices of the images.
+            - im_lookup_table: list of lists with indices of the images.
+            - txt_lookup_table: list of lists with indices of the words in the texts.
             - hidden: hidden variables for the LSTM.
             - texts: autograd Variable with a list of one-hot encoding matrices for
                 texts (M words x N vocab_size).
@@ -56,27 +57,34 @@ class FullBiLSTM(nn.Module):
             - (out, hidden): outputs and hidden states of the LSTM.
 
         """
-        # Get text features:
-        txt_feats = self.textn(texts)
+        # Get word features:
+        word_feats = self.textn(texts)
+        # Mean of word descriptors for each text:
+        txt_feats = [torch.mean(word_feats[i[0]:i[-1] + 1], 0) for batch in txt_lookup_table for i in batch]
+        txt_feats_matrix = autograd.Variable(torch.zeros(len(images), word_feats.size()[1]))
+        if txt_feats[0].is_cuda:
+            txt_feats_matrix = txt_feats_matrix.cuda()
+        for i, feat in enumerate(txt_feats):
+            txt_feats_matrix[i, :] = feat.data
         # Get image features:
         im_feats, _ = self.cnn(images)
         # Pack the sequences:
-        packed_feats = self.create_packed_seq(im_feats, seq_lens, lookup_table)
+        packed_feats = self.create_packed_seq(im_feats, seq_lens, im_lookup_table)
         # Forward the sequence through the LSTM:
-        return packed_feats, (im_feats, txt_feats), self.lstm(packed_feats, hidden)
+        return packed_feats, (im_feats, txt_feats_matrix), self.lstm(packed_feats, hidden)
 
     def init_hidden(self, batch_size):
         """Initialize the hidden state and cell state."""
         return (autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)),
                 autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)))
 
-    def create_packed_seq(self, feats, seq_lens, lookup_table):
+    def create_packed_seq(self, feats, seq_lens, im_lookup_table):
         """Create a packed input of sequences for a RNN.
 
         Args:
             - feats: torch.Tensor with data features (N imgs x feat_dim).
             - seq_lens: sequence lengths.
-            - lookup_table: list of image indices from seqs2batch.
+            - im_lookup_table: list of image indices from seqs2batch.
             - data: list (with length batch_size) of sequences of images (shaped seq_len x img_dim).
 
         Returns:
@@ -94,7 +102,7 @@ class FullBiLSTM(nn.Module):
         for i, seq_len in enumerate(seq_lens):  # Iterate over batch
             for j in range(max(seq_lens)):  # Iterate over sequence
                 if j < seq_len:
-                    seqs[i, j] = feats[lookup_table[i][j]]
+                    seqs[i, j] = feats[im_lookup_table[i][j]]
                 else:
                     seqs[i, j] = autograd.Variable(torch.zeros(feats.size()[1]))
 
