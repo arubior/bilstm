@@ -65,7 +65,7 @@ class FullBiLSTM(nn.Module):
         if txt_feats[0].is_cuda:
             txt_feats_matrix = txt_feats_matrix.cuda()
         for i, feat in enumerate(txt_feats):
-            txt_feats_matrix[i, :] = feat.data
+            txt_feats_matrix[i, :] = feat
         # Get image features:
         im_feats, _ = self.cnn(images)
         # Pack the sequences:
