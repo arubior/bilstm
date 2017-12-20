@@ -138,7 +138,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
         scheduler.step()
         for batch in dataloaders['train']:
 
-            tic_b = time.time()
+            # tic_b = time.time()
             # Clear gradients, reset hidden state.
             model.zero_grad()
             hidden = model.init_hidden(len(batch))
@@ -165,11 +165,11 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             cont_loss = contrastive_criterion(im_feats, txt_feats)
             lstm_loss = fw_loss + bw_loss
             loss = lstm_loss + cont_loss
-            lstm_loss.register_hook(save_grad('lstm'))
-            cont_loss.register_hook(save_grad('cont'))
+
+            im_feats.register_hook(save_grad('im_feats'))
             loss.backward()
             # Gradient clipping
-            torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
+            # torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
             optimizer.step()
 
             print("\033[1;31mloss %d: %.3f\033[0m" % (n_iter, loss.data[0]))
@@ -185,12 +185,12 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             print("\033[1;31n_iter: %d: mdists: %.3f\033[0m" % (n_iter, dists.data[0]))
 
             WRITER.add_scalar('data/loss', loss.data[0], n_iter)
+            WRITER.add_scalar('data/lstm_loss', lstm_loss.data[0], n_iter)
             WRITER.add_scalar('data/cont_loss', cont_loss.data[0], n_iter)
             WRITER.add_scalar('data/pos_dists', dists.data[0], n_iter)
-            WRITER.add_scalar('grads/lstm', GRADS['lstm'], n_iter)
-            WRITER.add_scalar('grads/contrastive', GRADS['cont'], n_iter)
-            # WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
-            # WRITER.add_scalar('data/loss_BW', bw_loss.data[0], n_iter)
+            WRITER.add_scalar('grads/im_feats', torch.mean(torch.cat([torch.norm(t)
+                                                                      for t in GRADS['im_feats']])),
+                              n_iter)
 
             # print("\033[1;31mBatch %d took %.2f secs\033[0m" % (n_iter, time.time() - tic_b))
             # print("\033[1;36m----------------------\033[0m")
