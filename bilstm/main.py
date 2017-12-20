@@ -53,6 +53,12 @@ TXT_TRANSFORMS = {'train': TXT_TRAIN_TF,
                   'test': TXT_TEST_VAL_TF,
                   'val': TXT_TEST_VAL_TF}
 
+GRADS = {}
+def save_grad(name):
+    """Save gradient value. To be called from "register_hook"."""
+    def hook(grad):
+        GRADS[name] = grad
+    return hook
 
 def config(net_params, data_params, opt_params, batch_params, cuda_params):
     """Get parameters to configure the experiment and prepare the needed variables.
@@ -157,7 +163,10 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             out, _ = pad_packed_sequence(out, batch_first=batch_first)
             fw_loss, bw_loss = criterion(packed_batch, out)
             cont_loss = contrastive_criterion(im_feats, txt_feats)
-            loss = fw_loss + bw_loss + cont_loss
+            lstm_loss = fw_loss + bw_loss
+            loss = lstm_loss + cont_loss
+            lstm_loss.register_hook(save_grad('lstm'))
+            cont_loss.register_hook(save_grad('cont'))
             loss.backward()
             # Gradient clipping
             torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
@@ -165,7 +174,8 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
 
             print("\033[1;31mloss %d: %.3f\033[0m" % (n_iter, loss.data[0]))
             print("\033[1;31mcont_loss %d: %.3f\033[0m" % (n_iter, cont_loss.data[0]))
-            print("\033[1;34mLSTM loss: %.3f ||| Contr. loss: %.3f\033[0m" % (loss.data[0] - cont_loss.data[0],
+            print("\033[1;34mLSTM loss: %.3f ||| Contr. loss: %.3f\033[0m" % (loss.data[0] -
+                                                                              cont_loss.data[0],
                                                                               cont_loss.data[0]))
             print("\033[1;31mBatch size = %d\033[0m" % len(batch))
             for i, b in enumerate(batch):
@@ -177,6 +187,8 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             WRITER.add_scalar('data/loss', loss.data[0], n_iter)
             WRITER.add_scalar('data/cont_loss', cont_loss.data[0], n_iter)
             WRITER.add_scalar('data/pos_dists', dists.data[0], n_iter)
+            WRITER.add_scalar('grads/lstm', GRADS['lstm'], n_iter)
+            WRITER.add_scalar('grads/contrastive', GRADS['cont'], n_iter)
             # WRITER.add_scalar('data/loss_FW', fw_loss.data[0], n_iter)
             # WRITER.add_scalar('data/loss_BW', bw_loss.data[0], n_iter)
 
