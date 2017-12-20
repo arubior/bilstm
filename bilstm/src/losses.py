@@ -8,6 +8,15 @@ import torch.autograd as autograd
 from torch.nn.utils.rnn import pad_packed_sequence
 
 
+def paper_dist(desc1, desc2):
+    """Distance metric used in the paper: cosine distance with normalized vectors."""
+    dists = torch.cat([torch.dot(a/torch.norm(a), b/torch.norm(b))
+                       for a, b in zip(desc1, desc2)])
+    if desc1.is_cuda:
+        dists = dists.cuda()
+    return dists
+
+
 class LSTMLosses(nn.Module):
     """Compute the forward and backward loss of a batch.
 
@@ -150,30 +159,20 @@ class SBContrastiveLoss(nn.Module):
         loss = autograd.Variable(torch.Tensor([0]))
         if desc1.is_cuda:
             loss = loss.cuda()
-        # same_dists = F.pairwise_distance(desc1, desc2)
-        # same_dists = 1 - F.cosine_similarity(desc1, desc2)
-        same_dists = self.paper_dist(desc1, desc2)
+        # same_dists = F.cosine_similarity(desc1, desc2)
+        same_dists = paper_dist(desc1, desc2)
         for i, d1 in enumerate(desc1):
             idxs = [x for x in range(desc2.size()[0]) if x != i]
-            # diff_dists = F.pairwise_distance(d1.repeat(desc2.size()[0] - 1, 1), desc2[idxs, :])
-            # diff_dists = 1 - F.cosine_similarity(d1.repeat(desc2.size()[0] - 1, 1), desc2[idxs, :])
-            diff_dists = self.paper_dist(d1.repeat(desc2.size()[0] - 1, 1), desc2[idxs, :])
+            # diff_dists = F.cosine_similarity(d1.repeat(desc2.size()[0] - 1, 1), desc2[idxs, :])
+            diff_dists = paper_dist(d1.repeat(desc2.size()[0] - 1, 1), desc2[idxs, :])
             loss += torch.sum(torch.max(self.margin - same_dists[i].repeat(desc2.size()[0] -1,
                                                                            1) + diff_dists, 1)[0])
 
         for j, d2 in enumerate(desc2):
             idxs = [x for x in range(desc1.size()[0]) if x != j]
-            # diff_dists = F.pairwise_distance(d2.repeat(desc1.size()[0] - 1, 1), desc1[idxs, :])
-            # diff_dists = 1 - F.cosine_similarity(d2.repeat(desc1.size()[0] - 1, 1), desc1[idxs, :])
-            diff_dists = self.paper_dist(d2.repeat(desc1.size()[0] - 1, 1), desc1[idxs, :])
+            # diff_dists = F.cosine_similarity(d2.repeat(desc1.size()[0] - 1, 1), desc1[idxs, :])
+            diff_dists = paper_dist(d2.repeat(desc1.size()[0] - 1, 1), desc1[idxs, :])
             loss += torch.sum(torch.max(self.margin - same_dists[j].repeat(desc1.size()[0] -1,
                                                                            1) + diff_dists, 1)[0])
 
         return loss/desc1.size()[0]
-
-    def paper_dist(self, desc1, desc2):
-        dists = torch.cat([torch.dot(a/torch.norm(a), b/torch.norm(b))
-                                                     for a, b in zip(desc1, desc2)])
-        if desc1.is_cuda:
-            dists = dists.cuda()
-        return dists

@@ -26,54 +26,13 @@ class FullBiLSTM(nn.Module):
         self.hidden_dim = hidden_dim
         self.batch_first = batch_first
         self.vocab_size = vocab_size
-        self.textn = nn.Linear(vocab_size, input_dim)
         self.cnn = models.inception_v3(pretrained=True)
         self.cnn.fc = nn.Linear(2048, input_dim)
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1,
                             batch_first=self.batch_first, bidirectional=True,
                             dropout=dropout)
 
-    def forward(self, images, seq_lens, im_lookup_table, txt_lookup_table, hidden, texts):
-        """Do a forward pass.
-
-        The forward pass implies:
-            - A normal forward of the images through a CNN.
-            - A pass of the texts through a text embedding.
-            - Transforming the image features to a pytorch PackedSequence.
-            - Doing the forward pass through the LSTM.
-
-        Args:
-            - images: autograd Variable with the images of the batch.
-            - seq_lens: torch tensor with a list of the sequence lengths.
-            - im_lookup_table: list of lists with indices of the images.
-            - txt_lookup_table: list of lists with indices of the words in the texts.
-            - hidden: hidden variables for the LSTM.
-            - texts: autograd Variable with a list of one-hot encoding matrices for
-                texts (M words x N vocab_size).
-
-        Returns:
-            - features extracted from the CNN (PackedSequence).
-            - (im_feats, txt_feats): network features for images and texts in the batch.
-            - (out, hidden): outputs and hidden states of the LSTM.
-
-        """
-        # Get image features:
-        im_feats, _ = self.cnn(images)
-        # Get word features:
-        word_feats = self.textn(texts)
-        # Mean of word descriptors for each text:
-        txt_feats = [torch.mean(word_feats[i[0]:i[-1] + 1], 0) for batch in txt_lookup_table for i in batch]
-        txt_feats_matrix = autograd.Variable(torch.zeros(len(images), word_feats.size()[1]))
-        if im_feats[0].is_cuda:
-            txt_feats_matrix = txt_feats_matrix.cuda()
-        for i, feat in enumerate(txt_feats):
-            txt_feats_matrix[i, :] = feat
-        # Pack the sequences:
-        packed_feats = self.create_packed_seq(im_feats, seq_lens, im_lookup_table)
-        # Forward the sequence through the LSTM:
-        return packed_feats, (im_feats, txt_feats_matrix), self.lstm(packed_feats, hidden)
-
-    def im_forward(self, images, seq_lens, im_lookup_table, hidden):
+    def forward(self, images, seq_lens, im_lookup_table, hidden):
         """Do a forward pass only with images.
 
         The image forward pass implies:
