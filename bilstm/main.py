@@ -6,6 +6,7 @@ import os
 import time
 import json
 import argparse
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -133,6 +134,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
 
     n_iter = 0
     tic = time.time()
+    torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
     for epoch in range(numepochs):
         print("Epoch %d - lr = %.4f" % (epoch, optimizer.param_groups[0]['lr']))
         scheduler.step()
@@ -164,12 +166,14 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             fw_loss, bw_loss = criterion(packed_batch, out)
             cont_loss = contrastive_criterion(im_feats, txt_feats)
             lstm_loss = fw_loss + bw_loss
-            loss = lstm_loss + cont_loss
+            loss = lstm_loss# + cont_loss
+
+            if np.isnan(loss.cpu().data.numpy()) or lstm_loss.cpu().data[0] < 0:
+                import epdb; epdb.set_trace()
 
             im_feats.register_hook(save_grad('im_feats'))
             loss.backward()
             # Gradient clipping
-            # torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
             optimizer.step()
 
             print("\033[1;31mloss %d: %.3f\033[0m" % (n_iter, loss.data[0]))

@@ -69,21 +69,30 @@ class LSTMLosses(nn.Module):
             bw_seq_feats = torch.cat((start_stop, feats[i, :seq_len, :]))
             bw_seq_hiddens = hidden[i, :seq_len, hidden.size()[2] // 2:]  # Backward hidden states
 
+            # torch.mm(fw_seq_hiddens[j].unsqueeze(0),
+                      # feats[k].permute(1, 0))
+
             for j in range(seq_len):
                 fw_denom = torch.cat([torch.exp(torch.mm(fw_seq_hiddens[j].unsqueeze(0),
                                                          feats[k].permute(1, 0))).sum()
                                       for k in range(len(seq_lens))]).sum()
                 fw_prob = torch.exp(torch.dot(fw_seq_hiddens[j], fw_seq_feats[j + 1])) / fw_denom
-                fw_seq_loss += fw_prob
+                import epdb; epdb.set_trace()
+                fw_seq_loss += torch.log(fw_prob)
+                # if fw_seq_loss.cpu().data[0] / (j+1) > 0 or np.isnan(fw_seq_loss.cpu().data[0]):
+                    # import epdb; epdb.set_trace()
+
+
+                # new_fw_loss = nn.functional.log_softmax()
 
                 bw_denom = torch.cat([torch.exp(torch.mm(bw_seq_hiddens[j].unsqueeze(0),
                                                          feats[k].permute(1, 0))).sum()
                                       for k in range(len(seq_lens))]).sum()
                 bw_prob = torch.exp(torch.dot(bw_seq_hiddens[j], bw_seq_feats[j])) / bw_denom
-                bw_seq_loss += bw_prob
+                bw_seq_loss += torch.log(bw_prob)
 
-            fw_seq_loss = - torch.log(fw_seq_loss)/seq_len
-            bw_seq_loss = - torch.log(bw_seq_loss)/seq_len
+            fw_seq_loss = - fw_seq_loss / seq_len
+            bw_seq_loss = - bw_seq_loss / seq_len
 
             fw_loss += fw_seq_loss
             bw_loss += bw_seq_loss
