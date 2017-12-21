@@ -166,7 +166,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             fw_loss, bw_loss = criterion(packed_batch, out)
             cont_loss = contrastive_criterion(im_feats, txt_feats)
             lstm_loss = fw_loss + bw_loss
-            loss = lstm_loss# + cont_loss
+            loss = lstm_loss + cont_loss
 
             if np.isnan(loss.cpu().data.numpy()) or lstm_loss.cpu().data[0] < 0:
                 import epdb; epdb.set_trace()
@@ -177,9 +177,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             optimizer.step()
 
             print("\033[1;31mloss %d: %.3f\033[0m" % (n_iter, loss.data[0]))
-            print("\033[1;31mcont_loss %d: %.3f\033[0m" % (n_iter, cont_loss.data[0]))
-            print("\033[1;34mLSTM loss: %.3f ||| Contr. loss: %.3f\033[0m" % (loss.data[0] -
-                                                                              cont_loss.data[0],
+            print("\033[1;34mLSTM loss: %.3f ||| Contr. loss: %.3f\033[0m" % (lstm_loss.data[0],
                                                                               cont_loss.data[0]))
             print("\033[1;31mBatch size = %d\033[0m" % len(batch))
             for i, b in enumerate(batch):
@@ -246,7 +244,8 @@ def main():
         net_params=[512, 512, 0.2, len(vocab), args.load_path],
         data_params=['data/images', 'data/label',
                      filenames],
-        opt_params=[0.2, 1e-4],
+        # opt_params=[0.2, 1e-4],
+        opt_params=[0.0001, 1e-4],
         batch_params=[args.batch_size, args.batch_first],
         cuda_params=[args.cuda, args.multigpu])
     print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])
