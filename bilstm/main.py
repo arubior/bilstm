@@ -114,7 +114,7 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
         PolyvoreDataset(os.path.join(json_dir, json_files[x]), img_dir,
                         img_transform=IMG_TRANSFORMS[x], txt_transform=TXT_TRANSFORMS[x]),
         batch_size=batch_size,
-        shuffle=True, num_workers=4,
+        shuffle=False, num_workers=4,
         collate_fn=collate_seq)
                    for x in ['train', 'test', 'val']}
 

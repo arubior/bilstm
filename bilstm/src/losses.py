@@ -51,7 +51,36 @@ class LSTMLosses(nn.Module):
             fw_loss = fw_loss.cuda()
             bw_loss = bw_loss.cuda()
 
+        X_fw = torch.autograd.Variable(
+            (torch.zeros( sum(seq_lens) + len(seq_lens), feats.size(2)))).cuda()
+        X_bw = torch.autograd.Variable(
+            (torch.zeros( sum(seq_lens) + len(seq_lens), feats.size(2)))).cuda()
+        start = 0
+
+        for feat, seq_len in zip(feats, seq_lens):
+            X_fw[start: start + seq_len] = feat[:seq_len]
+            X_bw[start+1: start + 1 + seq_len] = feat[:seq_len]
+            start += (seq_len + 1)  # add 1 because of column of 0
+
         for i, seq_len in enumerate(seq_lens):
+
+            fw_seq_hiddens = hidden[i, :seq_len, :hidden.size()[2] // 2]  # Forward hidden states
+            bw_seq_hiddens = hidden[i, :seq_len, hidden.size()[2] // 2:]  # Backward hidden states
+
+            fw_logprob = torch.nn.functional.log_softmax(torch.mm(fw_seq_hiddens, X_fw.permute(1, 0)))
+            fw_logprob_sq = fw_logprob[:, 1 : 1 + fw_logprob.size(0)]
+            # fw_loss += (-torch.sum(torch.diag(fw_logprob, 1)) / seq_len)
+            fw_loss += (-torch.sum(torch.diag(fw_logprob_sq)) / seq_len)
+
+            # backward inference
+            bw_logprob = torch.nn.functional.log_softmax(torch.mm(bw_seq_hiddens, X_bw.permute(1, 0)))
+            bw_logprob_sq = bw_logprob[:, :fw_logprob.size(0)]
+            # bw_loss += (-torch.sum(torch.diag(bw_logprob)) / seq_len)
+            bw_loss += (-torch.sum(torch.diag(bw_logprob_sq)) / seq_len)
+        return fw_loss / len(seq_lens), bw_loss / len(seq_lens)
+        """
+        for i, seq_len in enumerate(seq_lens):
+
             fw_seq_loss = autograd.Variable(torch.zeros(1))
             bw_seq_loss = autograd.Variable(torch.zeros(1))
 
@@ -78,9 +107,6 @@ class LSTMLosses(nn.Module):
                                       for k in range(len(seq_lens))]).sum()
                 fw_prob = torch.exp(torch.dot(fw_seq_hiddens[j], fw_seq_feats[j + 1])) / fw_denom
                 fw_seq_loss += torch.log(fw_prob)
-                # if fw_seq_loss.cpu().data[0] / (j+1) > 0 or np.isnan(fw_seq_loss.cpu().data[0]):
-                    # import epdb; epdb.set_trace()
-
 
                 # new_fw_loss = nn.functional.log_softmax()
 
@@ -97,7 +123,7 @@ class LSTMLosses(nn.Module):
             bw_loss += bw_seq_loss
 
         return fw_loss/len(seq_lens), bw_loss/len(seq_lens)
-
+        """
 
 class ContrastiveLoss(nn.Module):
     """Standard contrastive loss function.
