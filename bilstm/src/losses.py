@@ -77,7 +77,6 @@ class LSTMLosses(nn.Module):
                                                          feats[k].permute(1, 0))).sum()
                                       for k in range(len(seq_lens))]).sum()
                 fw_prob = torch.exp(torch.dot(fw_seq_hiddens[j], fw_seq_feats[j + 1])) / fw_denom
-                import epdb; epdb.set_trace()
                 fw_seq_loss += torch.log(fw_prob)
                 # if fw_seq_loss.cpu().data[0] / (j+1) > 0 or np.isnan(fw_seq_loss.cpu().data[0]):
                     # import epdb; epdb.set_trace()

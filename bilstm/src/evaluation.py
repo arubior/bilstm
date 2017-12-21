@@ -4,9 +4,9 @@ import numpy as np
 from PIL import Image
 import torch
 from torch.nn.utils.rnn import pad_packed_sequence
-from model_lstm import FullBiLSTM
-from losses import LSTMLosses
-from utils import ImageTransforms
+from src.model_lstm import FullBiLSTM
+from src.losses import LSTMLosses
+from src.utils import ImageTransforms
 import torchvision
 
 
