@@ -20,7 +20,6 @@ from src.model import FullBiLSTM
 from src.losses import LSTMLosses, SBContrastiveLoss
 from src.datasets import PolyvoreDataset
 from src.datasets import collate_seq
-from src.evaluation import Evaluation
 from tensorboardX import SummaryWriter
 
 WRITER = SummaryWriter()
@@ -184,7 +183,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
                 print("Seq %d - len = %d" % (i, len(b['texts'])))
 
             dists = torch.sum(1 - F.cosine_similarity(im_feats, txt_feats))/im_feats.size()[0]
-            print("\033[1;31n_iter: %d: mdists: %.3f\033[0m" % (n_iter, dists.data[0]))
+            print("\033[1;31mn_iter: %d: mdists: %.3f\033[0m" % (n_iter, dists.data[0]))
 
             WRITER.add_scalar('data/loss', loss.data[0], n_iter)
             WRITER.add_scalar('data/lstm_loss', lstm_loss.data[0], n_iter)
@@ -245,7 +244,7 @@ def main():
         data_params=['data/images', 'data/label',
                      filenames],
         # opt_params=[0.2, 1e-4],
-        opt_params=[0.0001, 1e-4],
+        opt_params=[0.001, 1e-4],
         batch_params=[args.batch_size, args.batch_first],
         cuda_params=[args.cuda, args.multigpu])
     print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])

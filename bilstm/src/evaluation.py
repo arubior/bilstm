@@ -34,7 +34,13 @@ class Evaluation(object):
         self.cuda = cuda
 
     def compatibility(self, sequence):
-        """Get the compatibility score of a sequence of images."""
+        """Get the compatibility score of a sequence of images.
+        Right now, it computes probability among the images of the own
+        sequence. Theoretically, it has to compute probability amongst
+        all images in the test(?) dataset (line 77 of
+        https://github.com/xthan/polyvore/blob/master/polyvore/fashion_compatibility.py)
+
+        """
         img_data = self.get_images(sequence)
         images = torch.Tensor()
         res = ImageTransforms(299)
@@ -45,17 +51,25 @@ class Evaluation(object):
         if self.cuda:
             images = images.cuda()
 
-        im_table = [range(0, len(images))]
-        try:
-            packed_seq = self.model.create_packed_seq(self.model.cnn(images), [len(images)], im_table)
-        except:
-            import epdb; epdb.set_trace()
-        # hidden = self.model.init_hidden(1)
-        # if self.cuda:
-            # hidden = (hidden[0].cuda(), hidden[1].cuda())
-        out, _ = self.model.lstm(packed_seq)  #, hidden)
-        out, _ = pad_packed_sequence(out, batch_first=self.batch_first)
-        fw_loss, bw_loss = self.criterion(packed_seq, out)
+        im_feats = self.model.cnn(images)
+        out, _ = self.model.lstm(im_feats.unsqueeze(0))
+        x_fw = torch.autograd.Variable(torch.zeros(im_feats.size(0) + 1, im_feats.size(1)))
+        x_bw = torch.autograd.Variable(torch.zeros(im_feats.size(0) + 1, im_feats.size(1)))
+        if self.cuda:
+            x_fw = x_fw.cuda()
+            x_bw = x_bw.cuda()
+
+        x_fw[:im_feats.size(0)] = im_feats
+        x_bw[1 : im_feats.size(0) + 1] = im_feats
+        fw_hiddens = out[0, :im_feats.size(0), :out.size(2) // 2]
+        bw_hiddens = out[0, :im_feats.size(0), out.size(2) // 2:]
+        fw_logprob = torch.nn.functional.log_softmax(torch.mm(fw_hiddens, x_fw.permute(1, 0)))
+        bw_logprob = torch.nn.functional.log_softmax(torch.mm(bw_hiddens, x_bw.permute(1, 0)))
+        fw_logprob_sq = fw_logprob[:, 1 : fw_logprob.size(0) + 1]
+        bw_logprob_sq = bw_logprob[:, :bw_logprob.size(0)]
+        fw_loss = - torch.sum(torch.diag(fw_logprob_sq)) / im_feats.size(0)
+        bw_loss = - torch.sum(torch.diag(bw_logprob_sq)) / im_feats.size(0)
+
         return fw_loss + bw_loss
 
 
@@ -81,7 +95,7 @@ def main():
     """Main function."""
     model = FullBiLSTM(512, 512, 2480, batch_first=True, dropout=0.7)
     evaluator = Evaluation(model, '../models/model_lstm.pth_6928', '../data/images',
-                           batch_first=True, cuda=False)
+                           batch_first=True, cuda=True)
     compatibility_file = '../data/label/fashion_compatibility_prediction.txt'
     seqs = [l.replace('\n', '') for l in open(compatibility_file).readlines()]
     pos = []
@@ -89,6 +103,7 @@ def main():
     for seq in seqs[:10]:
         seqtag = seq.split()[0]
         seqdata = seq.split()[1:]
+        compat = evaluator.compatibility(seqdata)
         if bool(seqtag):
             pos.append(compat)
         else:
