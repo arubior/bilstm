@@ -114,7 +114,7 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
         PolyvoreDataset(os.path.join(json_dir, json_files[x]), img_dir,
                         img_transform=IMG_TRANSFORMS[x], txt_transform=TXT_TRANSFORMS[x]),
         batch_size=batch_size,
-        shuffle=False, num_workers=4,
+        shuffle=True, num_workers=4,
         collate_fn=collate_seq)
                    for x in ['train', 'test', 'val']}
 
@@ -203,10 +203,10 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
 
             n_iter += 1
 
-        if not epoch % nsave:
-            print("Epoch %d (%d iters) -- Saving model in %s" % (epoch, n_iter, save_path))
-            torch.save(model.state_dict(), "%s_%d" % (save_path, n_iter))
-            evaluate(model, criterion)
+            if not n_iter % 1000:
+                print("Epoch %d (%d iters) -- Saving model in %s" % (epoch, n_iter, save_path))
+                torch.save(model.state_dict(), "%s_%d" % (save_path, n_iter))
+                # evaluate(model, criterion)
 
         print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))
 
