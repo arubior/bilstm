@@ -1,10 +1,12 @@
 """Evaluate results with a trained model."""
 import os
+import h5py
 import numpy as np
 from PIL import Image
 import torch
 from torch.nn.utils.rnn import pad_packed_sequence
-from model_lstm import FullBiLSTM
+# from model_lstm import FullBiLSTM
+from model import FullBiLSTM
 from losses import LSTMLosses
 from utils import ImageTransforms
 import torchvision
@@ -42,16 +44,7 @@ class Evaluation(object):
 
         """
         img_data = self.get_images(sequence)
-        images = torch.Tensor()
-        res = ImageTransforms(299)
-        imtr = lambda x: torchvision.transforms.ToTensor()(res.resize(x))
-        for img in img_data:
-            images = torch.cat((images, imtr(img).unsqueeze(0)))
-        images = torch.autograd.Variable(images)
-        if self.cuda:
-            images = images.cuda()
-
-        im_feats = self.model.cnn(images)
+        im_feats = self.get_img_feats(img_data)
         out, _ = self.model.lstm(im_feats.unsqueeze(0))
         x_fw = torch.autograd.Variable(torch.zeros(im_feats.size(0) + 1, im_feats.size(1)))
         x_bw = torch.autograd.Variable(torch.zeros(im_feats.size(0) + 1, im_feats.size(1)))
@@ -90,20 +83,37 @@ class Evaluation(object):
 
         return images
 
+    def get_img_feats(self, img_data):
+        """Get the features for some images."""
+        images = torch.Tensor()
+        imtr = lambda x: torchvision.transforms.ToTensor()(self.trf.resize(x))
+        for img in img_data:
+            images = torch.cat((images, imtr(img).unsqueeze(0)))
+        images = torch.autograd.Variable(images)
+        if self.cuda:
+            images = images.cuda()
+        return self.model.cnn(images)
+
 
 def main():
     """Main function."""
+    data = h5py.File('/data/test_feats.h5')
+    data_dict = dict()
+    for fname, feat in zip(data['filenames'], data['features']):
+        data_dict[fname] = feat
+
     model = FullBiLSTM(512, 512, 2480, batch_first=True, dropout=0.7)
-    evaluator = Evaluation(model, '../models/model_lstm.pth_6928', '../data/images',
+    evaluator = Evaluation(model, '../models/model.pth_6000', '../data/images',
                            batch_first=True, cuda=True)
     compatibility_file = '../data/label/fashion_compatibility_prediction.txt'
     seqs = [l.replace('\n', '') for l in open(compatibility_file).readlines()]
     pos = []
     neg = []
-    for seq in seqs[:10]:
+    for seq in seqs[-10:]:
         seqtag = seq.split()[0]
         seqdata = seq.split()[1:]
         compat = evaluator.compatibility(seqdata)
+        print("SEQ LENGTH = %d - TAG: %s - COMPAT: %.2f" % (len(seqdata), seqtag, compat))
         if bool(seqtag):
             pos.append(compat)
         else:
