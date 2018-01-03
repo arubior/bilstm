@@ -73,13 +73,13 @@ class LSTMLosses(nn.Module):
             fw_logprob = torch.nn.functional.log_softmax(torch.mm(fw_seq_hiddens,
                                                                   x_fw.permute(1, 0)))
             fw_logprob_sq = fw_logprob[:, 1 : 1 + fw_logprob.size(0)]
-            fw_loss += (-torch.sum(torch.diag(fw_logprob_sq)) / seq_len)
+            fw_loss += - torch.diag(fw_logprob_sq).mean()
 
             # backward inference
             bw_logprob = torch.nn.functional.log_softmax(torch.mm(bw_seq_hiddens,
                                                                   x_bw.permute(1, 0)))
             bw_logprob_sq = bw_logprob[:, :fw_logprob.size(0)]
-            bw_loss += (-torch.sum(torch.diag(bw_logprob_sq)) / seq_len)
+            bw_loss += - torch.diag(bw_logprob_sq).mean()
 
         return fw_loss / len(seq_lens), bw_loss / len(seq_lens)
 

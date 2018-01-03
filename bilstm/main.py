@@ -202,7 +202,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
 
             n_iter += 1
 
-            if not n_iter % 1000:
+            if not n_iter % nsave:
                 print("Epoch %d (%d iters) -- Saving model in %s" % (epoch, n_iter, save_path))
                 torch.save(model.state_dict(), "%s_%d" % (save_path, n_iter))
                 # evaluate(model, criterion)
@@ -253,7 +253,7 @@ def main():
 
     train([model, criterion, contrastive_criterion, optimizer, scheduler, vocab],
           dataloaders, args.cuda, args.batch_first,
-          [20, 3, args.save_path])
+          [20, 500, args.save_path])
 
 
 if __name__ == '__main__':
