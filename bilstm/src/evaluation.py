@@ -1,12 +1,14 @@
 """Evaluate results with a trained model."""
 import os
+import h5py
 import numpy as np
 from PIL import Image
 import torch
 from torch.nn.utils.rnn import pad_packed_sequence
-from src.model_lstm import FullBiLSTM
-from src.losses import LSTMLosses
-from src.utils import ImageTransforms
+# from model_lstm import FullBiLSTM
+from model import FullBiLSTM
+from losses import LSTMLosses
+from utils import ImageTransforms
 import torchvision
 
 
@@ -33,7 +35,7 @@ class Evaluation(object):
         self.batch_first = batch_first
         self.cuda = cuda
 
-    def compatibility(self, sequence):
+    def compatibility(self, sequence, test_feats):
         """Get the compatibility score of a sequence of images.
         Right now, it computes probability among the images of the own
         sequence. Theoretically, it has to compute probability amongst
@@ -41,18 +43,18 @@ class Evaluation(object):
         https://github.com/xthan/polyvore/blob/master/polyvore/fashion_compatibility.py)
 
         """
-        img_data = self.get_images(sequence)
-        images = torch.Tensor()
-        res = ImageTransforms(299)
-        imtr = lambda x: torchvision.transforms.ToTensor()(res.resize(x))
-        for img in img_data:
-            images = torch.cat((images, imtr(img).unsqueeze(0)))
-        images = torch.autograd.Variable(images)
+        # img_data = self.get_images(sequence)
+        # im_feats = self.get_img_feats(img_data)
+        try:
+            im_feats = torch.autograd.Variable(torch.from_numpy(np.array([test_feats[d] for d in sequence])))
+        except:
+            import epdb; epdb.set_trace()
         if self.cuda:
-            images = images.cuda()
-
-        im_feats = self.model.cnn(images)
+            im_feats = im_feats.cuda()
         out, _ = self.model.lstm(im_feats.unsqueeze(0))
+        im_feats = torch.autograd.Variable(torch.from_numpy(np.array(test_feats.values())))
+        if self.cuda:
+            im_feats = im_feats.cuda()
         x_fw = torch.autograd.Variable(torch.zeros(im_feats.size(0) + 1, im_feats.size(1)))
         x_bw = torch.autograd.Variable(torch.zeros(im_feats.size(0) + 1, im_feats.size(1)))
         if self.cuda:
@@ -80,8 +82,8 @@ class Evaluation(object):
             img = Image.open(os.path.join(self.img_dir, im_path.replace('_', '/') + '.jpg'))
             try:
                 if img.layers == 1:  # Imgs with 1 channel are usually noise.
-                    continue
-                    # img = Image.merge("RGB", [img.split()[0], img.split()[0], img.split()[0]])
+                    # continue
+                    img = Image.merge("RGB", [img.split()[0], img.split()[0], img.split()[0]])
             except AttributeError:
                 # Images with size = 1 in any dimension are useless.
                 if np.any(np.array(img.size) == 1):
@@ -90,24 +92,42 @@ class Evaluation(object):
 
         return images
 
+    def get_img_feats(self, img_data):
+        """Get the features for some images."""
+        images = torch.Tensor()
+        imtr = lambda x: torchvision.transforms.ToTensor()(self.trf.resize(x))
+        for img in img_data:
+            images = torch.cat((images, imtr(img).unsqueeze(0)))
+        images = torch.autograd.Variable(images)
+        if self.cuda:
+            images = images.cuda()
+        return self.model.cnn(images)
+
 
 def main():
     """Main function."""
+    data = h5py.File('data/test_feats.h5')
+    data_dict = dict()
+    for fname, feat in zip(data['filenames'], data['features']):
+        data_dict[fname] = feat
+
     model = FullBiLSTM(512, 512, 2480, batch_first=True, dropout=0.7)
-    evaluator = Evaluation(model, '../models/model_lstm.pth_6928', '../data/images',
+    evaluator = Evaluation(model, 'models/model.pth_6000', 'data/images',
                            batch_first=True, cuda=True)
-    compatibility_file = '../data/label/fashion_compatibility_prediction.txt'
+    compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
     seqs = [l.replace('\n', '') for l in open(compatibility_file).readlines()]
     pos = []
     neg = []
-    for seq in seqs[:10]:
+    for i, seq in enumerate(seqs):
         seqtag = seq.split()[0]
         seqdata = seq.split()[1:]
-        compat = evaluator.compatibility(seqdata)
+        compat = evaluator.compatibility(seqdata, data_dict)
+        print("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f" % (i, len(seqs), len(seqdata), seqtag, compat))
         if bool(seqtag):
             pos.append(compat)
         else:
             neg.append(compat)
+    import epdb; epdb.set_trace()
 
 
 if __name__ == '__main__':

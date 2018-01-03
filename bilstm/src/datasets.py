@@ -42,14 +42,17 @@ class PolyvoreDataset(Dataset):
         items = self.data[idx]['items']
         images = []
         texts = []
+        ignored = []
         for i in items:
             img = Image.open(os.path.join(self.img_dir, set_id, '%s.jpg' % i['index']))
             try:
                 if img.layers == 1:  # Imgs with 1 channel are usually noise.
-                    continue
-                    # img = Image.merge("RGB", [img.split()[0], img.split()[0], img.split()[0]])
+                    # ignored.append(set_id + '_%s' % i['index'])
+                    # continue
+                    img = Image.merge("RGB", [img.split()[0], img.split()[0], img.split()[0]])
             except AttributeError:
                 # Images with size = 1 in any dimension are useless.
+                ignored.append(set_id + '_%s' % i['index'])
                 if np.any(np.array(img.size) == 1):
                     continue
             images.append(img)
@@ -61,7 +64,7 @@ class PolyvoreDataset(Dataset):
         if self.txt_transform:
             texts = [self.txt_transform(t) for t in texts]
 
-        return {'images': images, 'texts': texts}
+        return {'images': images, 'texts': texts, 'ignored': ignored}
 
 
 def collate_seq(batch):
