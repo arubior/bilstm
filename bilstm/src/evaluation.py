@@ -72,10 +72,10 @@ class Evaluation(object):
             torch.mm(bw_hiddens, x_bw.permute(1, 0)))).data
         fw_logprob_sq = fw_logprob[:, 1 : fw_logprob.size(0) + 1]
         bw_logprob_sq = bw_logprob[:, :bw_logprob.size(0)]
-        fw_loss = - torch.sum(torch.diag(fw_logprob_sq)) / im_feats.size(0)
-        bw_loss = - torch.sum(torch.diag(bw_logprob_sq)) / im_feats.size(0)
+        fw_score = torch.diag(fw_logprob_sq).mean()
+        bw_score = torch.diag(bw_logprob_sq).mean()
 
-        return fw_loss + bw_loss
+        return fw_score + bw_score
 
 
     def get_images(self, sequence):
@@ -126,7 +126,7 @@ def main():
         seqdata = seq.split()[1:]
         compat = evaluator.compatibility(seqdata, data_dict)
         print("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f" % (i, len(seqs), len(seqdata), seqtag, compat))
-        if bool(seqtag):
+        if bool(int(seqtag)):
             pos.append(compat)
         else:
             neg.append(compat)
