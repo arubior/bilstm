@@ -16,7 +16,7 @@ def main():
     batch_size = 1
 
     model = FullBiLSTM(512, 512, 2480, batch_first=True, dropout=0.7)
-    evaluator = Evaluation(model, '../models/model.pth_6000', '../data/images',
+    evaluator = Evaluation(model, '../models/model.pth_8000', '../data/images',
                            batch_first=True, cuda=True)
     img_transform = ImageTransforms(299)
 

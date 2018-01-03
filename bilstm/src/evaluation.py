@@ -46,17 +46,18 @@ class Evaluation(object):
         # img_data = self.get_images(sequence)
         # im_feats = self.get_img_feats(img_data)
         try:
-            im_feats = torch.autograd.Variable(torch.from_numpy(np.array([test_feats[d] for d in sequence])))
+            im_feats = torch.from_numpy(np.array([test_feats[bytes(d, 'utf8')] for d in sequence]))
         except:
             import epdb; epdb.set_trace()
         if self.cuda:
             im_feats = im_feats.cuda()
-        out, _ = self.model.lstm(im_feats.unsqueeze(0))
-        im_feats = torch.autograd.Variable(torch.from_numpy(np.array(test_feats.values())))
+        out, _ = self.model.lstm(torch.autograd.Variable(im_feats).unsqueeze(0))
+        out = out.data
+        im_feats = torch.from_numpy(np.array(list(test_feats.values())))
         if self.cuda:
             im_feats = im_feats.cuda()
-        x_fw = torch.autograd.Variable(torch.zeros(im_feats.size(0) + 1, im_feats.size(1)))
-        x_bw = torch.autograd.Variable(torch.zeros(im_feats.size(0) + 1, im_feats.size(1)))
+        x_fw = torch.zeros(im_feats.size(0) + 1, im_feats.size(1))
+        x_bw = torch.zeros(im_feats.size(0) + 1, im_feats.size(1))
         if self.cuda:
             x_fw = x_fw.cuda()
             x_bw = x_bw.cuda()
@@ -65,8 +66,10 @@ class Evaluation(object):
         x_bw[1 : im_feats.size(0) + 1] = im_feats
         fw_hiddens = out[0, :im_feats.size(0), :out.size(2) // 2]
         bw_hiddens = out[0, :im_feats.size(0), out.size(2) // 2:]
-        fw_logprob = torch.nn.functional.log_softmax(torch.mm(fw_hiddens, x_fw.permute(1, 0)))
-        bw_logprob = torch.nn.functional.log_softmax(torch.mm(bw_hiddens, x_bw.permute(1, 0)))
+        fw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
+            torch.mm(fw_hiddens, x_fw.permute(1, 0)))).data
+        bw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
+            torch.mm(bw_hiddens, x_bw.permute(1, 0)))).data
         fw_logprob_sq = fw_logprob[:, 1 : fw_logprob.size(0) + 1]
         bw_logprob_sq = bw_logprob[:, :bw_logprob.size(0)]
         fw_loss = - torch.sum(torch.diag(fw_logprob_sq)) / im_feats.size(0)
@@ -112,7 +115,7 @@ def main():
         data_dict[fname] = feat
 
     model = FullBiLSTM(512, 512, 2480, batch_first=True, dropout=0.7)
-    evaluator = Evaluation(model, 'models/model.pth_6000', 'data/images',
+    evaluator = Evaluation(model, 'models/model.pth_8000', 'data/images',
                            batch_first=True, cuda=True)
     compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
     seqs = [l.replace('\n', '') for l in open(compatibility_file).readlines()]
