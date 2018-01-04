@@ -1,5 +1,6 @@
 """Evaluate results with a trained model."""
 import os
+import sys
 import h5py
 import numpy as np
 from PIL import Image
@@ -10,6 +11,7 @@ from model import FullBiLSTM
 from losses import LSTMLosses
 from utils import ImageTransforms
 import torchvision
+from sklearn import metrics
 
 
 class Evaluation(object):
@@ -46,7 +48,7 @@ class Evaluation(object):
         # img_data = self.get_images(sequence)
         # im_feats = self.get_img_feats(img_data)
         try:
-            im_feats = torch.from_numpy(np.array([test_feats[bytes(d, 'utf8')] for d in sequence]))
+            im_feats = torch.from_numpy(np.array([test_feats[d] for d in sequence]))
         except:
             import epdb; epdb.set_trace()
         if self.cuda:
@@ -115,22 +117,29 @@ def main():
         data_dict[fname] = feat
 
     model = FullBiLSTM(512, 512, 2480, batch_first=True, dropout=0.7)
-    evaluator = Evaluation(model, 'models/model.pth_8000', 'data/images',
+    evaluator = Evaluation(model, 'models/shuffle_1000', 'data/images',
                            batch_first=True, cuda=True)
     compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
     seqs = [l.replace('\n', '') for l in open(compatibility_file).readlines()]
     pos = []
     neg = []
-    for i, seq in enumerate(seqs):
+    labels = []
+    scores = []
+    jump = 1
+    for i, seq in enumerate(seqs[::jump]):
         seqtag = seq.split()[0]
         seqdata = seq.split()[1:]
         compat = evaluator.compatibility(seqdata, data_dict)
-        print("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f" % (i, len(seqs), len(seqdata), seqtag, compat))
+        scores.append(compat)
+        labels.append(int(seqtag))
+        sys.stdout.write("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f\r" % (i*jump, len(seqs), len(seqdata), seqtag, compat))
+        sys.stdout.flush()
         if bool(int(seqtag)):
             pos.append(compat)
         else:
             neg.append(compat)
-    import epdb; epdb.set_trace()
+    fpr, tpr, thresholds = metrics.roc_curve(labels, scores, pos_label=1)
+    print("\nCompatibility AUC: %f for %d outfits" % (metrics.auc(fpr, tpr), len(labels)))
 
 
 if __name__ == '__main__':
