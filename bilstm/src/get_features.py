@@ -1,5 +1,6 @@
 """Image feature extraction."""
 import os
+import sys
 import json
 import time
 import h5py
@@ -9,20 +10,18 @@ from datasets import PolyvoreDataset, collate_seq
 from evaluation import Evaluation
 from utils import ImageTransforms
 
-def main():
+def GetFeatures(model_name, feats_filename):
     """Main function for feature extraction."""
-    feats_filename = '/tmp/test_feats.h5'
 
     batch_size = 1
 
     model = FullBiLSTM(512, 512, 2480, batch_first=True, dropout=0.7)
-    evaluator = Evaluation(model, '../models/model.pth_8000', '../data/images',
+    evaluator = Evaluation(model, model_name, '../data/images',
                            batch_first=True, cuda=True)
-    img_transform = ImageTransforms(299)
 
     json_filenames = {'train': 'train_no_dup.json',
-                 'test': 'test_no_dup.json',
-                 'val': 'valid_no_dup.json'}
+                      'test': 'test_no_dup.json',
+                      'val': 'valid_no_dup.json'}
 
     img_dir, json_dir = '../data/images', '../data/label'
     dataloaders = {x: torch.utils.data.DataLoader(
@@ -40,7 +39,8 @@ def main():
 
     tic = time.time()
     for i, (test_file, batch) in enumerate(zip(test_files, dataloaders['test'])):
-        print("%d/%d sets - %.2f secs elapsed" % (i, len(test_files), time.time() - tic))
+        sys.stdout.write("%d/%d sets - %.2f secs elapsed" % (i, len(test_files), time.time() - tic))
+        sys.stdout.flush()
         set_id = test_file['set_id']
         im_idxs = [x['index'] for x in test_file['items']]
         im_feats = evaluator.get_img_feats(batch[0]['images'])
@@ -49,6 +49,8 @@ def main():
         features = torch.cat((features, im_feats.data))
         for ignored in batch[0]['ignored']:
             filenames.remove(ignored)
+    if not os.path.exists(os.path.dirname(feats_filename)):
+        os.makedirs(os.path.dirname(feats_filename))
     filenames = [n.encode("ascii", "ignore") for n in filenames]
     savefile = h5py.File(feats_filename, 'w')
     savefile.create_dataset('filenames', data=filenames)
@@ -56,4 +58,6 @@ def main():
     savefile.close()
 
 if __name__ == '__main__':
-    main()
+    model_name = '../models/model.pth_8000'
+    feats_filename = '../data/feats_model_8000.h5'
+    GetFeatures(model_name, feats_filename)

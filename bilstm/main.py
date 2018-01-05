@@ -204,7 +204,8 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
 
             if not n_iter % nsave:
                 print("Epoch %d (%d iters) -- Saving model in %s" % (epoch, n_iter, save_path))
-                torch.save(model.state_dict(), "%s_%d" % (save_path, n_iter))
+                torch.save(model.state_dict(), "%s_%d.pth" % (os.path.join(save_path,
+                                                                           'model'), n_iter))
                 # evaluate(model, criterion)
 
         print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))

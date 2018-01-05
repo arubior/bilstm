@@ -45,8 +45,6 @@ class Evaluation(object):
         https://github.com/xthan/polyvore/blob/master/polyvore/fashion_compatibility.py)
 
         """
-        # img_data = self.get_images(sequence)
-        # im_feats = self.get_img_feats(img_data)
         try:
             im_feats = torch.from_numpy(np.array([test_feats[d] for d in sequence]))
         except:
@@ -111,35 +109,38 @@ class Evaluation(object):
 
 def main():
     """Main function."""
+    compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
+    # model_name = 'models/shuffle_3000'
+    model_name = 'models/model.pth_8000'
+    feats_name = 'data/feats_model_8000.h5'
+    jump = 1
+
+    # GetFeatures(model_name)
+
     data = h5py.File('data/test_feats.h5')
     data_dict = dict()
     for fname, feat in zip(data['filenames'], data['features']):
         data_dict[fname] = feat
 
     model = FullBiLSTM(512, 512, 2480, batch_first=True, dropout=0.7)
-    evaluator = Evaluation(model, 'models/shuffle_1000', 'data/images',
+    evaluator = Evaluation(model, model_name, 'data/images',
                            batch_first=True, cuda=True)
-    compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
+
     seqs = [l.replace('\n', '') for l in open(compatibility_file).readlines()]
-    pos = []
-    neg = []
     labels = []
     scores = []
-    jump = 1
     for i, seq in enumerate(seqs[::jump]):
         seqtag = seq.split()[0]
         seqdata = seq.split()[1:]
         compat = evaluator.compatibility(seqdata, data_dict)
         scores.append(compat)
         labels.append(int(seqtag))
-        sys.stdout.write("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f\r" % (i*jump, len(seqs), len(seqdata), seqtag, compat))
+        sys.stdout.write("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f\r" %
+                         (i*jump, len(seqs), len(seqdata), seqtag, compat))
         sys.stdout.flush()
-        if bool(int(seqtag)):
-            pos.append(compat)
-        else:
-            neg.append(compat)
-    fpr, tpr, thresholds = metrics.roc_curve(labels, scores, pos_label=1)
-    print("\nCompatibility AUC: %f for %d outfits" % (metrics.auc(fpr, tpr), len(labels)))
+    fpr, tpr, _ = metrics.roc_curve(labels, scores, pos_label=1)
+    print("\nModel: %s" % model_name)
+    print("Compatibility AUC: %f for %d outfits" % (metrics.auc(fpr, tpr), len(labels)))
 
 
 if __name__ == '__main__':
