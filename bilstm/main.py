@@ -177,15 +177,15 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             # Gradient clipping
             optimizer.step()
 
-            print("\033[1;31mloss %d: %.3f\033[0m" % (n_iter, loss.data[0]))
+            print("\033[4;32miter %d\033[0m" % n_iter)
+            print("\033[1;31mTotal loss: %.3f\033[0m" % loss.data[0])
             print("\033[1;34mLSTM loss: %.3f ||| Contr. loss: %.3f\033[0m" % (lstm_loss.data[0],
                                                                               cont_loss.data[0]))
-            print("\033[1;31mBatch size = %d\033[0m" % len(batch))
-            for i, b in enumerate(batch):
-                print("Seq %d - len = %d" % (i, len(b['texts'])))
+            print("Seq lens:")
+            print([len(b['texts']) for b in batch])
 
             dists = torch.sum(1 - F.cosine_similarity(im_feats, txt_feats))/im_feats.size()[0]
-            print("\033[1;31mn_iter: %d: mdists: %.3f\033[0m" % (n_iter, dists.data[0]))
+            print("\033[0;31mmdists: %.3f\033[0m" % dists.data[0])
 
             WRITER.add_scalar('data/loss', loss.data[0], n_iter)
             WRITER.add_scalar('data/lstm_loss', lstm_loss.data[0], n_iter)
@@ -206,6 +206,8 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
 
             if not n_iter % nsave:
                 print("Epoch %d (%d iters) -- Saving model in %s" % (epoch, n_iter, save_path))
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
                 torch.save(model.state_dict(), "%s_%d.pth" % (os.path.join(save_path,
                                                                            'model'), n_iter))
                 # evaluate(model, criterion)
@@ -218,7 +220,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', '-bs', type=int, help='batch size', default=10)
     parser.add_argument('--save_path', '-sp', type=str, help='path to save the model',
-                        default='models/model.pth')
+                        default='models')
     parser.add_argument('--load_path', '-mp', type=str, help='path to load the model',
                         default=None)
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
@@ -247,7 +249,7 @@ def main():
         data_params=['data/images', 'data/label',
                      filenames],
         # opt_params=[0.2, 1e-4],
-        opt_params=[0.001, 1e-4],
+        opt_params=[0.005, 1e-4],
         batch_params=[args.batch_size, args.batch_first],
         cuda_params=[args.cuda, args.multigpu])
     print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])
