@@ -97,7 +97,7 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
     batch_size, batch_first = batch_params
     cuda, multigpu = cuda_params
 
-    model = FullBiLSTM(input_dim, hidden_dim, vocab_size, batch_first, dropout=0.7)
+    model = FullBiLSTM(input_dim, hidden_dim, vocab_size, batch_first, dropout=0.7, freeze=True)
     if load_path is not None:
         print("Loading weights from %s" % load_path)
         model.load_state_dict(torch.load(load_path))
@@ -117,7 +117,9 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
         collate_fn=collate_seq)
                    for x in ['train', 'test', 'val']}
 
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    # Optimize only the layers with requires_grad = True, not the frozen layers:
+    optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
+                          lr=learning_rate, weight_decay=weight_decay)
     criterion = LSTMLosses(batch_first, cuda)
     contrastive_criterion = SBContrastiveLoss(margin)
 

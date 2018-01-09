@@ -6,20 +6,25 @@ import torch.nn as nn
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pack_padded_sequence
 import torchvision.models as models
+from torchvision.models.inception import model_urls
+
+model_urls['inception_v3_google'] = model_urls['inception_v3_google'].replace('https://', 'http://')
 
 
 class FullBiLSTM(nn.Module):
     """Bi-LSTM architecture definition.
 
     Args:
-        - input_dim: dimension of the input.
-        - hidden_dim: dimension of the hidden/output layer.
-        - [batch_first]: parameter of the PackedSequence data.
-        - [dropout]: dropout value for LSTM.
+        - input_dim: (int) dimension of the input.
+        - hidden_dim: (int) dimension of the hidden/output layer.
+        - vocab_size: (int) size of the text vocabulary
+        - [batch_first]: (bool) parameter of the PackedSequence data.
+        - [dropout]: (float) dropout value for LSTM.
+        - [freeze]: (bool) whether to freeze or not the CNN part.
 
     """
 
-    def __init__(self, input_dim, hidden_dim, vocab_size, batch_first=False, dropout=0):
+    def __init__(self, input_dim, hidden_dim, vocab_size, batch_first=False, dropout=0, freeze=False):
         """Create the network."""
         super(FullBiLSTM, self).__init__()
         self.input_dim = input_dim
@@ -28,6 +33,9 @@ class FullBiLSTM(nn.Module):
         self.vocab_size = vocab_size
         self.textn = nn.Linear(vocab_size, input_dim)
         self.cnn = models.inception_v3(pretrained=True)
+        if freeze:
+            for param in self.cnn.parameters():
+                param.requires_grad = False
         self.cnn.fc = nn.Linear(2048, input_dim)
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1,
                             batch_first=self.batch_first, bidirectional=True,
