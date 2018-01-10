@@ -203,6 +203,8 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             n_iter += 1
 
             if not n_iter % nsave:
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
                 print("Epoch %d (%d iters) -- Saving model in %s" % (epoch, n_iter, save_path))
                 torch.save(model.state_dict(), "%s_%d.pth" % (os.path.join(save_path,
                                                                            'model'), n_iter))
@@ -245,7 +247,8 @@ def main():
         data_params=['data/images', 'data/label',
                      filenames],
         # opt_params=[0.2, 1e-4],
-        opt_params=[0.001, 1e-4],
+        # opt_params=[0.001, 1e-4],
+        opt_params=[0.01, 1e-4],
         batch_params=[args.batch_size, args.batch_first],
         cuda_params=[args.cuda, args.multigpu])
     print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])

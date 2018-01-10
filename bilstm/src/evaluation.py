@@ -46,7 +46,7 @@ class Evaluation(object):
 
         """
         try:
-            im_feats = torch.from_numpy(np.array([test_feats[d] for d in sequence]))
+            im_feats = torch.from_numpy(np.array([test_feats[bytes(d, 'utf8')] for d in sequence]))
         except:
             import epdb; epdb.set_trace()
         if self.cuda:
@@ -110,9 +110,9 @@ class Evaluation(object):
 def main():
     """Main function."""
     compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
-    # model_name = 'models/shuffle_3000'
-    model_name = 'models/model.pth_8000'
-    feats_name = 'data/feats_model_8000.h5'
+    model_name = 'models/shuffle_1500'
+    # model_name = 'models/model.pth_8000'
+    feats_name = 'data/feats_shuffle_1500.h5'
     jump = 1
 
     # GetFeatures(model_name)

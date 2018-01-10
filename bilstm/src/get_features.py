@@ -39,7 +39,7 @@ def GetFeatures(model_name, feats_filename):
 
     tic = time.time()
     for i, (test_file, batch) in enumerate(zip(test_files, dataloaders['test'])):
-        sys.stdout.write("%d/%d sets - %.2f secs elapsed" % (i, len(test_files), time.time() - tic))
+        sys.stdout.write("%d/%d sets - %.2f secs elapsed\r" % (i, len(test_files), time.time() - tic))
         sys.stdout.flush()
         set_id = test_file['set_id']
         im_idxs = [x['index'] for x in test_file['items']]
@@ -58,6 +58,6 @@ def GetFeatures(model_name, feats_filename):
     savefile.close()
 
 if __name__ == '__main__':
-    model_name = '../models/model.pth_8000'
-    feats_filename = '../data/feats_model_8000.h5'
+    model_name = '../models/shuffle_500'
+    feats_filename = '../data/feats_shuffle_500.h5'
     GetFeatures(model_name, feats_filename)
