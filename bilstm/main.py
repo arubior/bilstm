@@ -22,7 +22,6 @@ from src.datasets import PolyvoreDataset
 from src.datasets import collate_seq
 from tensorboardX import SummaryWriter
 
-WRITER = SummaryWriter()
 torch.manual_seed(1)
 
 ########################################################
@@ -70,6 +69,7 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
             margin for contrastive loss (float)
             size of the vocabulary (int)
             load_path for loading weights (str) (None by default)
+            freeze (bool) whether or not freezing the cnn layers
         - data_params: list containing:
             path to the directory where images are (string)
             path to the directory wher jsons are (string)
@@ -91,13 +91,13 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
         - criterion: loss equation to train
 
     """
-    input_dim, hidden_dim, margin, vocab_size, load_path = net_params
+    input_dim, hidden_dim, margin, vocab_size, load_path, freeze = net_params
     img_dir, json_dir, json_files = data_params
     learning_rate, weight_decay = opt_params
     batch_size, batch_first = batch_params
     cuda, multigpu = cuda_params
 
-    model = FullBiLSTM(input_dim, hidden_dim, vocab_size, batch_first, dropout=0.7, freeze=True)
+    model = FullBiLSTM(input_dim, hidden_dim, vocab_size, batch_first, dropout=0.7, freeze=freeze)
     if load_path is not None:
         print("Loading weights from %s" % load_path)
         model.load_state_dict(torch.load(load_path))
@@ -130,8 +130,13 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
     """Train the model.
 
     """
-    model, criterion, contrastive_criterion, optimizer, scheduler, vocab = train_params
+    model, criterion, contrastive_criterion, optimizer, scheduler, vocab, freeze = train_params
     numepochs, nsave, save_path = epoch_params
+
+    log_name =('runs/lr%.3f' % optimizer.param_groups[0]['initial_lr'])
+    if freeze:
+        log_name += '_frozen'
+    WRITER = SummaryWriter(log_name)
 
     n_iter = 0
     tic = time.time()
@@ -215,6 +220,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
                 # evaluate(model, criterion)
 
         print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))
+    WRITER.close()
 
 
 def main():
@@ -225,12 +231,16 @@ def main():
                         default='models')
     parser.add_argument('--load_path', '-mp', type=str, help='path to load the model',
                         default=None)
+    parser.add_argument('--lr', '-lr', type=float, help='initial learning rate',
+                        default=0.2)
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
     parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
+    parser.add_argument('--freeze', dest='freeze', help='freeze cnn layers', action='store_true')
     parser.add_argument('--batch_first', dest='batch_first', action='store_true')
     parser.add_argument('--no-batch_first', dest='batch_first', action='store_false')
     parser.add_argument('--multigpu', nargs='*', default=[], help='list of gpus to use')
     parser.set_defaults(cuda=True)
+    parser.set_defaults(freeze=False)
     parser.set_defaults(batch_first=True)
     parser.set_defaults(create_vocab=False)
     args = parser.parse_args()
@@ -238,6 +248,7 @@ def main():
     filenames = {'train': 'train_no_dup.json',
                  'test': 'test_no_dup.json',
                  'val': 'valid_no_dup.json'}
+
 
     tic = time.time()
     print("Reading all texts and creating the vocabulary")
@@ -247,23 +258,22 @@ def main():
     print("Vocabulary creation took %.2fsecs - %d words" % (time.time() - tic, len(vocab)))
 
     model, dataloaders, optimizer, criterion, contrastive_criterion = config(
-        net_params=[512, 512, 0.2, len(vocab), args.load_path],
+        net_params=[512, 512, 0.2, len(vocab), args.load_path, args.freeze],
         data_params=['data/images', 'data/label',
                      filenames],
         # opt_params=[0.2, 1e-4],
-        # opt_params=[0.001, 1e-4],
-        opt_params=[0.01, 1e-4],
+        opt_params=[args.lr, 1e-4],
+        # opt_params=[0.005, 1e-4],
         batch_params=[args.batch_size, args.batch_first],
         cuda_params=[args.cuda, args.multigpu])
     print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])
 
     scheduler = StepLR(optimizer, 2, 0.5)
 
-    train([model, criterion, contrastive_criterion, optimizer, scheduler, vocab],
+    train([model, criterion, contrastive_criterion, optimizer, scheduler, vocab, args.freeze],
           dataloaders, args.cuda, args.batch_first,
           [20, 500, args.save_path])
 
 
 if __name__ == '__main__':
     main()
-    WRITER.close()
