@@ -1,7 +1,9 @@
 """Evaluate results with a trained model."""
 import os
 import sys
+import time
 import h5py
+import argparse
 import numpy as np
 from PIL import Image
 import torch
@@ -46,7 +48,8 @@ class Evaluation(object):
 
         """
         try:
-            im_feats = torch.from_numpy(np.array([test_feats[bytes(d, 'utf8')] for d in sequence]))
+            # im_feats = torch.from_numpy(np.array([test_feats[bytes(d, 'utf8')] for d in sequence]))
+            im_feats = torch.from_numpy(np.array([test_feats[d] for d in sequence]))
         except:
             import epdb; epdb.set_trace()
         if self.cuda:
@@ -107,17 +110,17 @@ class Evaluation(object):
         return self.model.cnn(images)
 
 
-def main():
+def main(model_name, feats_name):
     """Main function."""
     compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
-    model_name = 'models/shuffle_1500'
+    # model_name = 'models/shuffle_1500'
     # model_name = 'models/model.pth_8000'
-    feats_name = 'data/feats_shuffle_1500.h5'
+    # feats_name = 'data/feats_shuffle_1500.h5'
     jump = 1
 
     # GetFeatures(model_name)
 
-    data = h5py.File('data/test_feats.h5')
+    data = h5py.File(feats_name, 'r')
     data_dict = dict()
     for fname, feat in zip(data['filenames'], data['features']):
         data_dict[fname] = feat
@@ -129,14 +132,16 @@ def main():
     seqs = [l.replace('\n', '') for l in open(compatibility_file).readlines()]
     labels = []
     scores = []
+    tic = time.time()
     for i, seq in enumerate(seqs[::jump]):
         seqtag = seq.split()[0]
         seqdata = seq.split()[1:]
         compat = evaluator.compatibility(seqdata, data_dict)
         scores.append(compat)
         labels.append(int(seqtag))
-        sys.stdout.write("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f\r" %
-                         (i*jump, len(seqs), len(seqdata), seqtag, compat))
+        sys.stdout.write("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f - %.2f min left\r" %
+                         (i*jump, len(seqs), len(seqdata), seqtag, compat,
+                         (time.time() - tic)/(i + 1)*jump*(len(seqs)/jump - i*jump)/60))
         sys.stdout.flush()
     fpr, tpr, _ = metrics.roc_curve(labels, scores, pos_label=1)
     print("\nModel: %s" % model_name)
@@ -144,4 +149,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_path', '-m', type=str, help='path to the model', default='')
+    parser.add_argument('--feats_path', '-sp', type=str, help='path to the features', default='')
+    args = parser.parse_args()
+    main(args.model_path, args.feats_path)
