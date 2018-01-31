@@ -1,17 +1,20 @@
 """Image feature extraction."""
+# Disable no-member for torch.
+# pylint: disable=E1101
 import os
 import sys
 import json
 import time
+import argparse
 import h5py
 import torch
-import argparse
-from model import FullBiLSTM
-from datasets import PolyvoreDataset, collate_seq
-from evaluation import Evaluation
-from utils import ImageTransforms
+from bilstm.src.model import FullBiLSTM
+from bilstm.src.datasets import PolyvoreDataset, collate_seq
+from bilstm.src.evaluation import Evaluation
 
-def GetFeatures(model_name, feats_filename):
+# Disable too-many-locals.
+# pylint: disable=R0914
+def get_features(model_name, feats_filename):
     """Main function for feature extraction."""
 
     batch_size = 1
@@ -63,11 +66,12 @@ def GetFeatures(model_name, feats_filename):
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path', '-m', type=str, help='path to the model', default='')
-    parser.add_argument('--save_path', '-sp', type=str, help='path to save the features', default='')
-    args = parser.parse_args()
+    PARSER = argparse.ArgumentParser()
+    PARSER.add_argument('--model_path', '-m', type=str, help='path to the model', default='')
+    PARSER.add_argument('--save_path', '-sp', type=str,
+                        help='path to save the features', default='')
+    ARGS = PARSER.parse_args()
 
-    model_name = args.model_path
-    feats_filename = args.save_path
-    GetFeatures(model_name, feats_filename)
+    MODEL_NAME = ARGS.model_path
+    FEATS_FILENAME = ARGS.save_path
+    get_features(MODEL_NAME, FEATS_FILENAME)

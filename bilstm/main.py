@@ -53,13 +53,30 @@ TXT_TRANSFORMS = {'train': TXT_TRAIN_TF,
                   'val': TXT_TEST_VAL_TF}
 
 GRADS = {}
+
+
 def save_grad(name):
     """Save gradient value. To be called from "register_hook"."""
     def hook(grad):
+        """Get gradient value."""
         GRADS[name] = grad
     return hook
 
-def config(net_params, data_params, opt_params, batch_params, cuda_params):
+
+def write_tensorboard(writer, data, n_iter):
+    """Write several scalars in a tensorboard writer.
+
+    Args:
+        writer: SummaryWriter object from tensorboardX.
+        data: dictionary with 'name for writing': data for writing.
+        n_iter: number of iteration to write.
+
+    """
+    for name, value in data.iteritems():
+        writer.add_scalar(name, value, n_iter)
+
+
+def config(net_params, data_params, opt_params, cuda_params):
     """Get parameters to configure the experiment and prepare the needed variables.
 
     Args:
@@ -70,19 +87,18 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
             size of the vocabulary (int)
             load_path for loading weights (str) (None by default)
             freeze (bool) whether or not freezing the cnn layers
-        - data_params: list containing:
-            path to the directory where images are (string)
-            path to the directory wher jsons are (string)
-            names of the train, test and validation jsons (dictionary)
-        - opt_params: list containing:
-            learning rate value (float)
-            weight decay value (float)
-        - batch_params: list containing:
-            batch_size (int)
-            batch_first (bool) for the LSTM sequences
-        - cuda_params:
-            cuda (bool): whether to use GPU or not
-            multigpu (list of int): indices of GPUs to use
+        - data_params: dictionary with keys:
+            'img_dir': path to the directory where images are (string)
+            'json_dir': path to the directory wher jsons are (string)
+            'json_files': names of the train, test and validation jsons (dictionary)
+            'batch_size': batch_size (int)
+            'batch_first': batch_first (bool) for the LSTM sequences
+        - opt_params: dictionary with keys:
+            'learning_rate': learning rate value (float)
+            'weight_decay': weight decay value (float)
+        - cuda_params: dictionary with keys:
+            'cuda': (bool): whether to use GPU or not
+            'multigpu': (list of int): indices of GPUs to use
 
     Returns:
         - model: pytorch model to train
@@ -92,35 +108,33 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
 
     """
     input_dim, hidden_dim, margin, vocab_size, load_path, freeze = net_params
-    img_dir, json_dir, json_files = data_params
-    learning_rate, weight_decay = opt_params
-    batch_size, batch_first = batch_params
-    cuda, multigpu = cuda_params
 
-    model = FullBiLSTM(input_dim, hidden_dim, vocab_size, batch_first, dropout=0.7, freeze=freeze)
+    model = FullBiLSTM(input_dim, hidden_dim, vocab_size, data_params['batch_first'],
+                       dropout=0.7, freeze=freeze)
     if load_path is not None:
         print("Loading weights from %s" % load_path)
         model.load_state_dict(torch.load(load_path))
-    if cuda:
+    if cuda_params['cuda']:
         print("Switching model to gpu")
         model.cuda()
-    if multigpu:
+    if cuda_params['multigpu']:
         print("Switching model to multigpu")
         model.cuda()
-        model = nn.DataParallel(model, device_ids=multigpu)
+        model = nn.DataParallel(model, device_ids=cuda_params['multigpu'])
 
     dataloaders = {x: torch.utils.data.DataLoader(
-        PolyvoreDataset(os.path.join(json_dir, json_files[x]), img_dir,
+        PolyvoreDataset(os.path.join(data_params['json_dir'], data_params['json_files'][x]),
+                        data_params['img_dir'],
                         img_transform=IMG_TRANSFORMS[x], txt_transform=TXT_TRANSFORMS[x]),
-        batch_size=batch_size,
+        batch_size=data_params['batch_size'],
         shuffle=True, num_workers=4,
         collate_fn=collate_seq)
                    for x in ['train', 'test', 'val']}
 
     # Optimize only the layers with requires_grad = True, not the frozen layers:
     optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
-                          lr=learning_rate, weight_decay=weight_decay)
-    criterion = LSTMLosses(batch_first, cuda)
+                          lr=opt_params['learning_rate'], weight_decay=opt_params['weight_decay'])
+    criterion = LSTMLosses(data_params['batch_first'], cuda_params['cuda'])
     contrastive_criterion = SBContrastiveLoss(margin)
 
     return model, dataloaders, optimizer, criterion, contrastive_criterion
@@ -133,20 +147,18 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
     model, criterion, contrastive_criterion, optimizer, scheduler, vocab, freeze = train_params
     numepochs, nsave, save_path = epoch_params
 
-    log_name =('runs/lr%.3f' % optimizer.param_groups[0]['initial_lr'])
+    log_name = ('runs/lr%.3f' % optimizer.param_groups[0]['initial_lr'])
     if freeze:
         log_name += '_frozen'
-    WRITER = SummaryWriter(log_name)
+    writer = SummaryWriter(log_name)
 
     n_iter = 0
     tic = time.time()
-    torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
     for epoch in range(numepochs):
         print("Epoch %d - lr = %.4f" % (epoch, optimizer.param_groups[0]['lr']))
         scheduler.step()
         for batch in dataloaders['train']:
 
-            # tic_b = time.time()
             # Clear gradients, reset hidden state.
             model.zero_grad()
             hidden = model.init_hidden(len(batch))
@@ -154,13 +166,12 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             # Get a list of images and texts from sequences:
             images, texts, seq_lens, im_lookup_table, txt_lookup_table = seqs2batch(batch, vocab)
 
+            images = autograd.Variable(images)
+            texts = autograd.Variable(texts)
             if cuda:
                 hidden = (hidden[0].cuda(), hidden[1].cuda())
-                images = autograd.Variable(images).cuda()
-                texts = autograd.Variable(texts).cuda()
-            else:
-                images = autograd.Variable(images)
-                texts = autograd.Variable(texts)
+                images = images.cuda()
+                texts = texts.cuda()
 
             packed_batch, (im_feats, txt_feats), (out, hidden) = model.forward(images,
                                                                                seq_lens,
@@ -175,37 +186,30 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             loss = lstm_loss + cont_loss
 
             if np.isnan(loss.cpu().data.numpy()) or lstm_loss.cpu().data[0] < 0:
-                import epdb; epdb.set_trace()
+                import epdb
+                epdb.set_trace()
 
             im_feats.register_hook(save_grad('im_feats'))
             loss.backward()
             # Gradient clipping
+            torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
             optimizer.step()
 
             print("\033[4;32miter %d\033[0m" % n_iter)
-            print("\033[1;31mTotal loss: %.3f\033[0m" % loss.data[0])
-            print("\033[1;34mLSTM loss: %.3f ||| Contr. loss: %.3f\033[0m" % (lstm_loss.data[0],
-                                                                              cont_loss.data[0]))
-            print("Seq lens:")
-            print([len(b['texts']) for b in batch])
+            print("\033[1;34mTotal loss: %.3f ||| LSTM loss: %.3f ||| Contr. loss: %.3f\033[0m" %
+                  (loss.data[0], lstm_loss.data[0], cont_loss.data[0]))
+            print("Seq lens:", [len(b['texts']) for b in batch])
 
             dists = torch.sum(1 - F.cosine_similarity(im_feats, txt_feats))/im_feats.size()[0]
             print("\033[0;31mmdists: %.3f\033[0m" % dists.data[0])
 
-            WRITER.add_scalar('data/loss', loss.data[0], n_iter)
-            WRITER.add_scalar('data/lstm_loss', lstm_loss.data[0], n_iter)
-            WRITER.add_scalar('data/cont_loss', cont_loss.data[0], n_iter)
-            WRITER.add_scalar('data/pos_dists', dists.data[0], n_iter)
-            WRITER.add_scalar('grads/im_feats', torch.mean(torch.cat([torch.norm(t)
-                                                                      for t in GRADS['im_feats']])),
-                              n_iter)
-
-            # print("\033[1;31mBatch %d took %.2f secs\033[0m" % (n_iter, time.time() - tic_b))
-            # print("\033[1;36m----------------------\033[0m")
-            # print("\033[0;92mForward loss: %.2f <==> Backward loss: %.2f\033[0m" %
-                  # (fw_loss.data[0], bw_loss.data[0]))
-            # print("\033[0;4;92mTOTAL LOSS: %.2f\033[0m" % loss.data[0])
-            # print("\033[1;36m----------------------\033[0m")
+            write_data = {'data/loss': loss.data[0],
+                          'data/lstm_loss': lstm_loss.data[0],
+                          'data/cont_loss': cont_loss.data[0],
+                          'data/pos_dists': dists.data[0],
+                          'grads/im_feats': torch.mean(torch.cat([torch.norm(t)
+                                                                  for t in GRADS['im_feats']]))}
+            write_tensorboard(writer, write_data, n_iter)
 
             n_iter += 1
 
@@ -215,12 +219,11 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
                 print("Epoch %d (%d iters) -- Saving model in %s" % (epoch, n_iter, save_path))
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
-                torch.save(model.state_dict(), "%s_%d.pth" % (os.path.join(save_path,
-                                                                           'model'), n_iter))
-                # evaluate(model, criterion)
+                torch.save(model.state_dict(), "%s_%d.pth" % (
+                    os.path.join(save_path, 'model'), n_iter))
 
         print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))
-    WRITER.close()
+    writer.close()
 
 
 def main():
@@ -249,23 +252,29 @@ def main():
                  'test': 'test_no_dup.json',
                  'val': 'valid_no_dup.json'}
 
-
     tic = time.time()
     print("Reading all texts and creating the vocabulary")
-    all_texts = [TXT_TEST_VAL_TF(t['name']) for d in json.load(open(os.path.join('data/label',
-                                                   filenames['train']))) for t in d['items']]
-    vocab = create_vocab(all_texts)
+    # Create the vocabulary with all the texts.
+    vocab = create_vocab([TXT_TEST_VAL_TF(t['name']) for d in json.load(
+        open(os.path.join('data/label', filenames['train'])))
+                          for t in d['items']])
     print("Vocabulary creation took %.2fsecs - %d words" % (time.time() - tic, len(vocab)))
+
+    data_params = {'img_dir': 'data/images',
+                   'json_dir': 'data/label',
+                   'json_files': filenames,
+                   'batch_size': args.batch_size,
+                   'batch_first': args.batch_first}
+    opt_params = {'learning_rate': args.lr,
+                  'weight_decay': 1e-4}
 
     model, dataloaders, optimizer, criterion, contrastive_criterion = config(
         net_params=[512, 512, 0.2, len(vocab), args.load_path, args.freeze],
-        data_params=['data/images', 'data/label',
-                     filenames],
-        # opt_params=[0.2, 1e-4],
-        opt_params=[args.lr, 1e-4],
-        # opt_params=[0.005, 1e-4],
-        batch_params=[args.batch_size, args.batch_first],
-        cuda_params=[args.cuda, args.multigpu])
+        data_params=data_params,
+        opt_params=opt_params,
+        cuda_params={'cuda': args.cuda,
+                     'multigpu': args.multigpu})
+
     print("before training: lr = %.4f" % optimizer.param_groups[0]['lr'])
 
     scheduler = StepLR(optimizer, 2, 0.5)
