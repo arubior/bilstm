@@ -144,8 +144,8 @@ def main(model_name, feats_name):
                          (time.time() - tic)/(i + 1)*jump*(len(seqs)/jump - i*jump)/60))
         sys.stdout.flush()
     fpr, tpr, _ = metrics.roc_curve(labels, scores, pos_label=1)
-    print("\nModel: %s" % model_name)
-    print("Compatibility AUC: %f for %d outfits" % (metrics.auc(fpr, tpr), len(labels)))
+    print("\033[0;31m\nModel: %s\033[0m" % model_name)
+    print("\033[1;30mCompatibility AUC: %f for %d outfits\033[0m" % (metrics.auc(fpr, tpr), len(labels)))
 
 
 if __name__ == '__main__':

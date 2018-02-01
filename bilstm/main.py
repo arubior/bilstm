@@ -235,7 +235,7 @@ def main():
                         default=0.2)
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
     parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
-    parser.add_argument('--freeze', dest='freeze', help='freeze cnn layers', action='store_true')
+    parser.add_argument('--freeze', '-fr', dest='freeze', help='freeze cnn layers', action='store_true')
     parser.add_argument('--batch_first', dest='batch_first', action='store_true')
     parser.add_argument('--no-batch_first', dest='batch_first', action='store_false')
     parser.add_argument('--multigpu', nargs='*', default=[], help='list of gpus to use')
