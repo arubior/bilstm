@@ -19,6 +19,8 @@ class FullBiLSTM(nn.Module):
 
     """
 
+    # Disable too-many-arguments.
+    # pylint: disable=R0913
     def __init__(self, input_dim, hidden_dim, vocab_size, batch_first=False, dropout=0):
         """Create the network."""
         super(FullBiLSTM, self).__init__()

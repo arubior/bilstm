@@ -1,15 +1,18 @@
 """Some utilities."""
+# Disable no-member for torch.
 # pylint: disable=E1101
+# Disable superfluous-parens for python 3
+# pylint: disable=C0325
 import random
 import torch
 import PIL
 import numpy as np
-import matplotlib.pyplot as plt
-# reload(sys)
-# sys.setdefaultencoding('utf8')
+# import matplotlib.pyplot as plt
 from nltk.stem import WordNetLemmatizer
 
 
+# Disable too-many-locals (no clear way of reducing them).
+# pylint: disable=R0914
 def seqs2batch(data, word_to_ix):
     """Get a list of images and texts from a list of sequences.
 
@@ -44,7 +47,7 @@ def seqs2batch(data, word_to_ix):
         txt_seq_lookup = []
         for img, txt in zip(seq_imgs, seq_txts):
             text_to_append = range(word_count, word_count + len(txt.split()))
-            if len(text_to_append) == 0:
+            if not text_to_append:
                 # IMAGES WITHOUT TEXT ARE NORMALLY IRRELEVANT.
                 # plt.imshow(img.permute(1, 2, 0).numpy())
                 # plt.show()
