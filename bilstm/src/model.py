@@ -73,8 +73,13 @@ class FullBiLSTM(nn.Module):
         """
         # Get image features:
         im_feats, _ = self.cnn(images)
+        # L2 norm as here: https://github.com/xthan/polyvore/blob/master/polyvore/polyvore_model_bi.py#L328
+        im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
+
         # Get word features:
         word_feats = self.textn(texts)
+        # L2 norm as here: https://github.com/xthan/polyvore/blob/master/polyvore/polyvore_model_bi.py#L330
+        word_feats = torch.nn.functional.normalize(word_feats, p=2, dim=1)
 
         # Mean of word descriptors for each text:
         # txt_feats = [torch.mean(word_feats[i[0]:i[-1] + 1], 0)
@@ -121,8 +126,12 @@ class FullBiLSTM(nn.Module):
 
     def init_hidden(self, batch_size):
         """Initialize the hidden state and cell state."""
+        return (autograd.Variable(torch.rand(2, batch_size, self.hidden_dim) * 2 * 0.08),  # https://github.com/xthan/polyvore/blob/master/polyvore/polyvore_model_bi.py#L55
+                autograd.Variable(torch.rand(2, batch_size, self.hidden_dim) * 2 * 0.08))
+        """
         return (autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)),
-                autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)))
+        autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)))
+        """
 
     def create_packed_seq(self, feats, seq_lens, im_lookup_table):
         """Create a packed input of sequences for a RNN.

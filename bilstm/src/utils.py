@@ -268,3 +268,16 @@ class TextTransforms(object):
         to_delete = np.array(words)[perm[:int(random.random()*self.delete_ratio*len(words))]]
 
         return ' '.join([w for w in words if w not in to_delete])
+
+
+def write_tensorboard(writer, data, n_iter):
+    """Write several scalars in a tensorboard writer.
+
+    Args:
+        writer: SummaryWriter object from tensorboardX.
+        data: dictionary with 'name for writing': data for writing.
+        n_iter: number of iteration to write.
+
+    """
+    for name, value in data.iteritems():
+        writer.add_scalar(name, value, n_iter)

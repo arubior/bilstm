@@ -15,7 +15,7 @@ import torch.nn.functional as F
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pad_packed_sequence
 import torchvision
-from src.utils import seqs2batch, ImageTransforms, TextTransforms, create_vocab
+from src.utils import seqs2batch, ImageTransforms, TextTransforms, create_vocab, write_tensorboard
 from src.model import FullBiLSTM
 from src.losses import LSTMLosses, SBContrastiveLoss
 from src.datasets import PolyvoreDataset
@@ -61,19 +61,6 @@ def save_grad(name):
         """Get gradient value."""
         GRADS[name] = grad
     return hook
-
-
-def write_tensorboard(writer, data, n_iter):
-    """Write several scalars in a tensorboard writer.
-
-    Args:
-        writer: SummaryWriter object from tensorboardX.
-        data: dictionary with 'name for writing': data for writing.
-        n_iter: number of iteration to write.
-
-    """
-    for name, value in data.iteritems():
-        writer.add_scalar(name, value, n_iter)
 
 
 def config(net_params, data_params, opt_params, cuda_params):
@@ -238,7 +225,8 @@ def main():
                         default=0.2)
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
     parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
-    parser.add_argument('--freeze', '-fr', dest='freeze', help='freeze cnn layers', action='store_true')
+    parser.add_argument('--freeze', '-fr', dest='freeze', help='freeze cnn layers',
+                        action='store_true')
     parser.add_argument('--batch_first', dest='batch_first', action='store_true')
     parser.add_argument('--no-batch_first', dest='batch_first', action='store_false')
     parser.add_argument('--multigpu', nargs='*', default=[], help='list of gpus to use')

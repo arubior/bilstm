@@ -8,9 +8,9 @@ import time
 import argparse
 import h5py
 import torch
-from bilstm.src.model import FullBiLSTM
-from bilstm.src.datasets import PolyvoreDataset, collate_seq
-from bilstm.src.evaluation import Evaluation
+from model import FullBiLSTM
+from datasets import PolyvoreDataset, collate_seq
+from evaluation import Evaluation
 
 # Disable too-many-locals.
 # pylint: disable=R0914

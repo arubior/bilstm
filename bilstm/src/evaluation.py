@@ -8,9 +8,9 @@ import numpy as np
 from PIL import Image
 import torch
 # from model_lstm import FullBiLSTM
-from bilstm.src.model import FullBiLSTM
-from bilstm.src.losses import LSTMLosses
-from bilstm.src.utils import ImageTransforms
+from model import FullBiLSTM
+from losses import LSTMLosses
+from utils import ImageTransforms
 import torchvision
 from sklearn import metrics
 
