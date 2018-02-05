@@ -12,7 +12,7 @@ def paper_dist(desc1, desc2):
     """Distance metric used in the paper: cosine distance with normalized vectors."""
     dists = torch.cat([torch.dot(a/torch.norm(a), b/torch.norm(b))
                        for a, b in zip(desc1, desc2)])
-    if desc1.is_cuda:
+    if desc1.is_cuda and desc2.is_cuda:
         dists = dists.cuda()
     return dists
 
@@ -31,6 +31,8 @@ class LSTMLosses(nn.Module):
         self.batch_first = batch_first
         self.cuda = cuda
 
+    # Disable too-many-locals (no clear way of reducing them).
+    # pylint: disable=R0914
     def forward(self, packed_feats, hidden):
         """Compute forward and backward losses.
 
@@ -131,12 +133,12 @@ class SBContrastiveLoss(nn.Module):
         super(SBContrastiveLoss, self).__init__()
         self.margin = margin
 
-    def forward(self, desc1, desc2):
+    def forward(self, descs1, descs2):
         """Forward function.
 
         Args:
-            - desc1: (torch autograd Variable) descriptors of the first branch.
-            - desc2: (torch autograd Variable) descriptors of the second branch.
+            - descs1: (torch autograd Variable) descriptors of the first branch.
+            - descs2: (torch autograd Variable) descriptors of the second branch.
             - labels: (torch autograd Variable) similarity labels (1 for similar items,
               0 for dissimilar).
 
@@ -145,27 +147,29 @@ class SBContrastiveLoss(nn.Module):
             loss = sum_f(sum_k(max(0, m - d(f, v) + d(f, v_k)) +
                    sum_v(sum_k(max(0, m - d(v, f) + d(v, f_k)),
             where sum_X denotes sumatory over X, m is the margin value, d is the distance metric,
-            f and v are desc1 and desc2, v_k are non-matching desc2s for a given desc1, and f_k are
-            non-matching desc1s for a given desc2.
+            f and v are descs1 and descs2, v_k are non-matching descs2s for a given descs1,
+            and f_k are non-matching descs1s for a given descs2.
 
         """
         loss = autograd.Variable(torch.Tensor([0]))
-        if desc1.is_cuda:
+        if descs1.is_cuda:
             loss = loss.cuda()
-        # same_dists = F.cosine_similarity(desc1, desc2)
-        same_dists = paper_dist(desc1, desc2)
-        for i, d1 in enumerate(desc1):
-            idxs = [x for x in range(desc2.size()[0]) if x != i]
-            # diff_dists = F.cosine_similarity(d1.repeat(desc2.size()[0] - 1, 1), desc2[idxs, :])
-            diff_dists = paper_dist(d1.repeat(desc2.size()[0] - 1, 1), desc2[idxs, :])
-            loss += torch.sum(torch.max(self.margin - same_dists[i].repeat(desc2.size()[0] -1,
+        # same_dists = F.cosine_similarity(descs1, descs2)
+        same_dists = paper_dist(descs1, descs2)
+        for i, desc1 in enumerate(descs1):
+            idxs = [x for x in range(descs2.size()[0]) if x != i]
+            # diff_dists = F.cosine_similarity(desc1.repeat(descs2.size()[0] - 1, 1),
+            # descs2[idxs, :])
+            diff_dists = paper_dist(desc1.repeat(descs2.size()[0] - 1, 1), descs2[idxs, :])
+            loss += torch.sum(torch.max(self.margin - same_dists[i].repeat(descs2.size()[0] -1,
                                                                            1) + diff_dists, 1)[0])
 
-        for j, d2 in enumerate(desc2):
-            idxs = [x for x in range(desc1.size()[0]) if x != j]
-            # diff_dists = F.cosine_similarity(d2.repeat(desc1.size()[0] - 1, 1), desc1[idxs, :])
-            diff_dists = paper_dist(d2.repeat(desc1.size()[0] - 1, 1), desc1[idxs, :])
-            loss += torch.sum(torch.max(self.margin - same_dists[j].repeat(desc1.size()[0] -1,
+        for j, desc2 in enumerate(descs2):
+            idxs = [x for x in range(descs1.size()[0]) if x != j]
+            # diff_dists = F.cosine_similarity(desc2.repeat(descs1.size()[0] - 1, 1),
+            # descs1[idxs, :])
+            diff_dists = paper_dist(desc2.repeat(descs1.size()[0] - 1, 1), descs1[idxs, :])
+            loss += torch.sum(torch.max(self.margin - same_dists[j].repeat(descs1.size()[0] -1,
                                                                            1) + diff_dists, 1)[0])
 
-        return loss/desc1.size()[0]
+        return loss/descs1.size()[0]

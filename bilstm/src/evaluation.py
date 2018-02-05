@@ -2,12 +2,11 @@
 import os
 import sys
 import time
-import h5py
 import argparse
+import h5py
 import numpy as np
 from PIL import Image
 import torch
-from torch.nn.utils.rnn import pad_packed_sequence
 # from model_lstm import FullBiLSTM
 from model import FullBiLSTM
 from losses import LSTMLosses
@@ -15,6 +14,9 @@ from utils import ImageTransforms
 import torchvision
 from sklearn import metrics
 
+
+# Disable superfluous-parens warning for python 3.
+# pylint: disable=C0325
 
 class Evaluation(object):
     """Evaluate an existing model.
@@ -25,6 +27,8 @@ class Evaluation(object):
 
     """
 
+    # We need all the arguments
+    # pylint: disable=R0913
     def __init__(self, model, weights, img_dir, batch_first, cuda):
         """Load the model weights."""
         if cuda:
@@ -47,11 +51,16 @@ class Evaluation(object):
         https://github.com/xthan/polyvore/blob/master/polyvore/fashion_compatibility.py)
 
         """
+        # Disable complaints about no-member in torch
+        # pylint: disable=E1101
         try:
-            # im_feats = torch.from_numpy(np.array([test_feats[bytes(d, 'utf8')] for d in sequence]))
+            # im_feats = torch.from_numpy(np.array([test_feats[bytes(d, 'utf8')]
+            # for d in sequence]))
             im_feats = torch.from_numpy(np.array([test_feats[d] for d in sequence]))
-        except:
-            import epdb; epdb.set_trace()
+        except KeyError:
+            print("Key %s not in the precomputed features." % d)
+            import epdb
+            epdb.set_trace()
         if self.cuda:
             im_feats = im_feats.cuda()
         out, _ = self.model.lstm(torch.autograd.Variable(im_feats).unsqueeze(0))
@@ -73,12 +82,11 @@ class Evaluation(object):
             torch.mm(fw_hiddens, x_fw.permute(1, 0)))).data
         bw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
             torch.mm(bw_hiddens, x_bw.permute(1, 0)))).data
-        fw_logprob_sq = fw_logprob[:, 1 : fw_logprob.size(0) + 1]
-        bw_logprob_sq = bw_logprob[:, :bw_logprob.size(0)]
-        fw_score = torch.diag(fw_logprob_sq).mean()
-        bw_score = torch.diag(bw_logprob_sq).mean()
+        score = torch.diag(fw_logprob[:, 1 : fw_logprob.size(0) + 1]).mean() +\
+            torch.diag(bw_logprob[:, :bw_logprob.size(0)]).mean()
+        # pylint: enable=E1101
 
-        return fw_score + bw_score
+        return score
 
 
     def get_images(self, sequence):
@@ -102,23 +110,23 @@ class Evaluation(object):
         """Get the features for some images."""
         images = torch.Tensor()
         imtr = lambda x: torchvision.transforms.ToTensor()(self.trf.resize(x))
+        # Disable complaints about no-member in torch
+        # pylint: disable=E1101
         for img in img_data:
             images = torch.cat((images, imtr(img).unsqueeze(0)))
+        # pylint: enable=E1101
         images = torch.autograd.Variable(images)
         if self.cuda:
             images = images.cuda()
         return self.model.cnn(images)
 
 
+# Disable too-many-locals. No clear way to reduce them
+# pylint: disable= R0914
 def main(model_name, feats_name):
     """Main function."""
     compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
-    # model_name = 'models/shuffle_1500'
-    # model_name = 'models/model.pth_8000'
-    # feats_name = 'data/feats_shuffle_1500.h5'
     jump = 1
-
-    # GetFeatures(model_name)
 
     data = h5py.File(feats_name, 'r')
     data_dict = dict()
@@ -141,16 +149,16 @@ def main(model_name, feats_name):
         labels.append(int(seqtag))
         sys.stdout.write("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f - %.2f min left\r" %
                          (i*jump, len(seqs), len(seqdata), seqtag, compat,
-                         (time.time() - tic)/(i + 1)*jump*(len(seqs)/jump - i*jump)/60))
+                          (time.time() - tic)/(i + 1)*jump*(len(seqs)/jump - i*jump)/60))
         sys.stdout.flush()
     fpr, tpr, _ = metrics.roc_curve(labels, scores, pos_label=1)
-    print("\nModel: %s" % model_name)
-    print("Compatibility AUC: %f for %d outfits" % (metrics.auc(fpr, tpr), len(labels)))
+    print("\033[0;31m\nModel: %s\033[0m" % model_name)
+    print("\033[1;30mCompatibility AUC: %f for %d outfits\033[0m" % (metrics.auc(fpr, tpr), len(labels)))
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path', '-m', type=str, help='path to the model', default='')
-    parser.add_argument('--feats_path', '-sp', type=str, help='path to the features', default='')
-    args = parser.parse_args()
-    main(args.model_path, args.feats_path)
+    PARSER = argparse.ArgumentParser()
+    PARSER.add_argument('--model_path', '-m', type=str, help='path to the model', default='')
+    PARSER.add_argument('--feats_path', '-sp', type=str, help='path to the features', default='')
+    ARGS = PARSER.parse_args()
+    main(ARGS.model_path, ARGS.feats_path)

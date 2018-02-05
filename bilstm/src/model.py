@@ -24,7 +24,10 @@ class FullBiLSTM(nn.Module):
 
     """
 
-    def __init__(self, input_dim, hidden_dim, vocab_size, batch_first=False, dropout=0, freeze=False):
+    # Disable too-many-arguments.
+    # pylint: disable=R0913
+    def __init__(self, input_dim, hidden_dim, vocab_size,
+                 batch_first=False, dropout=0, freeze=False):
         """Create the network."""
         super(FullBiLSTM, self).__init__()
         self.input_dim = input_dim
@@ -41,6 +44,9 @@ class FullBiLSTM(nn.Module):
                             batch_first=self.batch_first, bidirectional=True,
                             dropout=dropout)
 
+    # Disable too-many-arguments and too-many-locals.
+    # pylint: disable=R0913
+    # pylint: disable=R0914
     def forward(self, images, seq_lens, im_lookup_table, txt_lookup_table, hidden, texts):
         """Do a forward pass.
 
@@ -67,23 +73,31 @@ class FullBiLSTM(nn.Module):
         """
         # Get image features:
         im_feats, _ = self.cnn(images)
+        # L2 norm as here: https://github.com/xthan/polyvore/blob/master/polyvore/polyvore_model_bi.py#L328
+        im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
+
         # Get word features:
         word_feats = self.textn(texts)
+        # L2 norm as here: https://github.com/xthan/polyvore/blob/master/polyvore/polyvore_model_bi.py#L330
+        word_feats = torch.nn.functional.normalize(word_feats, p=2, dim=1)
 
         # Mean of word descriptors for each text:
-        # txt_feats = [torch.mean(word_feats[i[0]:i[-1] + 1], 0) for batch in txt_lookup_table for i in batch]
+        # txt_feats = [torch.mean(word_feats[i[0]:i[-1] + 1], 0)
+        #              for batch in txt_lookup_table for i in batch]
         txt_feats_matrix = autograd.Variable(torch.zeros(len(images), word_feats.size()[1]))
         if im_feats[0].is_cuda:
             txt_feats_matrix = txt_feats_matrix.cuda()
-        aa = [y for x in txt_lookup_table for y in x]
+        table_idxs = [y for x in txt_lookup_table for y in x]
         for i in range(txt_feats_matrix.size(0)):
             # txt_feats_matrix[i, :] = feat
-            txt_feats_matrix[i, ] = torch.mean(word_feats[aa[i]], 0)
+            txt_feats_matrix[i, ] = torch.mean(word_feats[table_idxs[i]], 0)
 
         # Pack the sequences:
         packed_feats = self.create_packed_seq(im_feats, seq_lens, im_lookup_table)
         # Forward the sequence through the LSTM:
         return packed_feats, (im_feats, txt_feats_matrix), self.lstm(packed_feats, hidden)
+    # pylint: enable=R0913
+    # pylint: enable=R0914
 
     def im_forward(self, images, seq_lens, im_lookup_table, hidden):
         """Do a forward pass only with images.
@@ -112,8 +126,12 @@ class FullBiLSTM(nn.Module):
 
     def init_hidden(self, batch_size):
         """Initialize the hidden state and cell state."""
+        return (autograd.Variable(torch.rand(2, batch_size, self.hidden_dim) * 2 * 0.08),  # https://github.com/xthan/polyvore/blob/master/polyvore/polyvore_model_bi.py#L55
+                autograd.Variable(torch.rand(2, batch_size, self.hidden_dim) * 2 * 0.08))
+        """
         return (autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)),
-                autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)))
+        autograd.Variable(torch.randn(2, batch_size, self.hidden_dim)))
+        """
 
     def create_packed_seq(self, feats, seq_lens, im_lookup_table):
         """Create a packed input of sequences for a RNN.
