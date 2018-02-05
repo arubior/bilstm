@@ -3,6 +3,7 @@
 # pylint: disable=C0325
 # pylint: disable=W0403
 import os
+import ast
 import time
 import json
 import argparse
@@ -106,6 +107,7 @@ def config(net_params, data_params, opt_params, batch_params, cuda_params):
         model.cuda()
     if multigpu:
         print("Switching model to multigpu")
+        multgpu = ast.literal_eval(multigpu[0])
         model.cuda()
         model = nn.DataParallel(model, device_ids=multigpu)
 
@@ -140,7 +142,6 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
 
     n_iter = 0
     tic = time.time()
-    torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
     for epoch in range(numepochs):
         print("Epoch %d - lr = %.4f" % (epoch, optimizer.param_groups[0]['lr']))
         scheduler.step()
@@ -180,6 +181,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             im_feats.register_hook(save_grad('im_feats'))
             loss.backward()
             # Gradient clipping
+            torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
             optimizer.step()
 
             print("\033[4;32miter %d\033[0m" % n_iter)
@@ -272,7 +274,7 @@ def main():
 
     train([model, criterion, contrastive_criterion, optimizer, scheduler, vocab, args.freeze],
           dataloaders, args.cuda, args.batch_first,
-          [20, 500, args.save_path])
+          [100, 500, args.save_path])
 
 
 if __name__ == '__main__':
