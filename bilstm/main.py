@@ -116,8 +116,9 @@ def config(net_params, data_params, opt_params, cuda_params):
                         data_params['img_dir'],
                         img_transform=IMG_TRANSFORMS[x], txt_transform=TXT_TRANSFORMS[x]),
         batch_size=data_params['batch_size'],
-        shuffle=True, num_workers=4,
-        collate_fn=collate_seq)
+        shuffle=True, num_workers=24,
+        collate_fn=collate_seq,
+        pin_memory=True)
                    for x in ['train', 'test', 'val']}
 
     # Optimize only the layers with requires_grad = True, not the frozen layers:
