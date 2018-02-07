@@ -279,5 +279,5 @@ def write_tensorboard(writer, data, n_iter):
         n_iter: number of iteration to write.
 
     """
-    for name, value in data.iteritems():
+    for name, value in data.items():
         writer.add_scalar(name, value, n_iter)

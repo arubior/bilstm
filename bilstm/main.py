@@ -136,7 +136,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
     model, criterion, contrastive_criterion, optimizer, scheduler, vocab, freeze = train_params
     numepochs, nsave, save_path = epoch_params
 
-    log_name = ('runs/lr%.3f' % optimizer.param_groups[0]['initial_lr'])
+    log_name = ('runs/L2/lr%.3f' % optimizer.param_groups[0]['initial_lr'])
     if freeze:
         log_name += '_frozen'
     writer = SummaryWriter(log_name)
