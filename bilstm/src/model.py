@@ -79,7 +79,7 @@ class FullBiLSTM(nn.Module):
         # Get word features:
         word_feats = self.textn(texts)
         # L2 norm as here: https://github.com/xthan/polyvore/blob/master/polyvore/polyvore_model_bi.py#L330
-        word_feats = torch.nn.functional.normalize(word_feats, p=2, dim=1)
+        # word_feats = torch.nn.functional.normalize(word_feats, p=2, dim=1)
 
         # Mean of word descriptors for each text:
         # txt_feats = [torch.mean(word_feats[i[0]:i[-1] + 1], 0)
@@ -91,6 +91,7 @@ class FullBiLSTM(nn.Module):
         for i in range(txt_feats_matrix.size(0)):
             # txt_feats_matrix[i, :] = feat
             txt_feats_matrix[i, ] = torch.mean(word_feats[table_idxs[i]], 0)
+        txt_feats_matrix = torch.nn.functional.normalize(txt_feats_matrix, p=2, dim=1)
 
         # Pack the sequences:
         packed_feats = self.create_packed_seq(im_feats, seq_lens, im_lookup_table)

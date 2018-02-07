@@ -63,16 +63,16 @@ class Evaluation(object):
             epdb.set_trace()
         # init_hidden = (torch.autograd.Variable(torch.zeros(2, im_feats.size(0), 512)),
                        # torch.autograd.Variable(torch.zeros(2, im_feats.size(0), 512)))
-        init_hidden = (torch.autograd.Variable(torch.zeros(2, 1, 512)),
-                       torch.autograd.Variable(torch.zeros(2, 1, 512)))
+        # init_hidden = (torch.autograd.Variable(torch.zeros(2, 1, 512)),
+                       # torch.autograd.Variable(torch.zeros(2, 1, 512)))
 
         if self.cuda:
             im_feats = im_feats.cuda()
-            init_hidden = (init_hidden[0].cuda(), init_hidden[1].cuda())
+            # init_hidden = (init_hidden[0].cuda(), init_hidden[1].cuda())
 
         im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
-        out, _ = self.model.lstm(torch.autograd.Variable(im_feats).unsqueeze(0),
-                                 init_hidden)
+        out, _ = self.model.lstm(torch.autograd.Variable(im_feats).unsqueeze(0))  # ,
+                                 # init_hidden)
         out = out.data
 
         fw_hiddens = out[0, :im_feats.size(0), :out.size(2) // 2]
@@ -90,8 +90,6 @@ class Evaluation(object):
 
         x_fw[:im_feats.size(0)] = im_feats
         x_bw[1 : im_feats.size(0) + 1] = im_feats
-
-        import epdb; epdb.set_trace()
 
         fw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
             torch.mm(fw_hiddens, x_fw.permute(1, 0)))).data
