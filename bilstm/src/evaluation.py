@@ -61,8 +61,9 @@ class Evaluation(object):
             print("Key %s not in the precomputed features." % d)
             import epdb
             epdb.set_trace()
-        # init_hidden = (torch.autograd.Variable(torch.zeros(2, im_feats.size(0), 512)),
-                       # torch.autograd.Variable(torch.zeros(2, im_feats.size(0), 512)))
+
+        # Initial state: all zeros
+        # https://github.com/xthan/polyvore/blob/master/polyvore/fashion_compatibility.py#L60
         init_hidden = (torch.autograd.Variable(torch.zeros(2, 1, 512)),
                        torch.autograd.Variable(torch.zeros(2, 1, 512)))
 
@@ -91,14 +92,13 @@ class Evaluation(object):
         x_fw[:im_feats.size(0)] = im_feats
         x_bw[1 : im_feats.size(0) + 1] = im_feats
 
-        import epdb; epdb.set_trace()
-
         fw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
             torch.mm(fw_hiddens, x_fw.permute(1, 0)))).data
         bw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
             torch.mm(bw_hiddens, x_bw.permute(1, 0)))).data
         score = torch.diag(fw_logprob[:, 1 : fw_logprob.size(0) + 1]).mean() +\
             torch.diag(bw_logprob[:, :bw_logprob.size(0)]).mean()
+
         # pylint: enable=E1101
 
         return score
