@@ -3,6 +3,7 @@
 # pylint: disable=C0325
 # pylint: disable=W0403
 import os
+import ast
 import time
 import json
 import argparse
@@ -106,6 +107,7 @@ def config(net_params, data_params, opt_params, cuda_params):
         model.cuda()
     if cuda_params['multigpu']:
         print("Switching model to multigpu")
+        multgpu = ast.literal_eval(multigpu[0])
         model.cuda()
         model = nn.DataParallel(model, device_ids=cuda_params['multigpu'])
 
@@ -114,8 +116,9 @@ def config(net_params, data_params, opt_params, cuda_params):
                         data_params['img_dir'],
                         img_transform=IMG_TRANSFORMS[x], txt_transform=TXT_TRANSFORMS[x]),
         batch_size=data_params['batch_size'],
-        shuffle=True, num_workers=4,
-        collate_fn=collate_seq)
+        shuffle=True, num_workers=24,
+        collate_fn=collate_seq,
+        pin_memory=True)
                    for x in ['train', 'test', 'val']}
 
     # Optimize only the layers with requires_grad = True, not the frozen layers:
@@ -134,7 +137,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
     model, criterion, contrastive_criterion, optimizer, scheduler, vocab, freeze = train_params
     numepochs, nsave, save_path = epoch_params
 
-    log_name = ('runs/lr%.3f' % optimizer.param_groups[0]['initial_lr'])
+    log_name = ('runs/L2/lr%.3f' % optimizer.param_groups[0]['initial_lr'])
     if freeze:
         log_name += '_frozen'
     writer = SummaryWriter(log_name)
@@ -269,7 +272,7 @@ def main():
 
     train([model, criterion, contrastive_criterion, optimizer, scheduler, vocab, args.freeze],
           dataloaders, args.cuda, args.batch_first,
-          [20, 500, args.save_path])
+          [100, 500, args.save_path])
 
 
 if __name__ == '__main__':
