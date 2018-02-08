@@ -10,8 +10,6 @@ from torch.nn.utils.rnn import pad_packed_sequence
 
 def paper_dist(desc1, desc2):
     """Distance metric used in the paper: cosine distance with normalized vectors."""
-    # dists = torch.cat([torch.dot(a/torch.norm(a), b/torch.norm(b))
-                       # for a, b in zip(desc1, desc2)])
     dists = torch.cat([torch.dot(a, b) for a, b in zip(desc1, desc2)])
     if desc1.is_cuda and desc2.is_cuda:
         dists = dists.cuda()
