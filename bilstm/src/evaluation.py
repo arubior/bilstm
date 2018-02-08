@@ -62,22 +62,22 @@ class Evaluation(object):
             import epdb
             epdb.set_trace()
 
-        hidden = self.model.init_hidden(1)
+        # hidden = self.model.init_hidden(1)
 
         if self.cuda:
             im_feats = im_feats.cuda()
-            hidden = (hidden[0].cuda(), hidden[1].cuda())
+            # hidden = (hidden[0].cuda(), hidden[1].cuda())
 
-        im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
-        out, _ = self.model.lstm(torch.autograd.Variable(im_feats).unsqueeze(0),
-                                 hidden)
+        # im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
+        out, _ = self.model.lstm(torch.autograd.Variable(im_feats).unsqueeze(0))
+                                 # hidden)
         out = out.data
 
         fw_hiddens = out[0, :im_feats.size(0), :out.size(2) // 2]
         bw_hiddens = out[0, :im_feats.size(0), out.size(2) // 2:]
 
         im_feats = torch.from_numpy(np.array(list(test_feats.values())))
-        im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
+        # im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
         if self.cuda:
             im_feats = im_feats.cuda()
         x_fw = torch.zeros(im_feats.size(0) + 1, im_feats.size(1))
