@@ -43,7 +43,7 @@ class Evaluation(object):
         self.batch_first = batch_first
         self.cuda = cuda
 
-    def compatibility(self, sequence, test_feats):
+    def compatibility(self, sequence, test_feats, x_values, i_seq):
         """Get the compatibility score of a sequence of images.
         Right now, it computes probability among the images of the own
         sequence. Theoretically, it has to compute probability amongst
@@ -76,27 +76,16 @@ class Evaluation(object):
         fw_hiddens = out[0, :im_feats.size(0), :out.size(2) // 2]
         bw_hiddens = out[0, :im_feats.size(0), out.size(2) // 2:]
 
-        im_feats = torch.from_numpy(np.array(list(test_feats.values())))
-        im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
         if self.cuda:
             im_feats = im_feats.cuda()
-        x_fw = torch.zeros(im_feats.size(0) + 1, im_feats.size(1))
-        x_bw = torch.zeros(im_feats.size(0) + 1, im_feats.size(1))
-        if self.cuda:
-            x_fw = x_fw.cuda()
-            x_bw = x_bw.cuda()
-
-        x_fw[:im_feats.size(0)] = im_feats
-        x_bw[1 : im_feats.size(0) + 1] = im_feats
-
-        import epdb; epdb.set_trace()
+            x_values = x_values.cuda()
 
         fw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
-            torch.mm(fw_hiddens, x_fw.permute(1, 0))), dim=1).data
+            torch.mm(fw_hiddens, x_values.permute(1, 0))), dim=1).data
         bw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
-            torch.mm(bw_hiddens, x_bw.permute(1, 0))), dim=1).data
-        score = torch.diag(fw_logprob[:, 1 : fw_logprob.size(0) + 1]).mean() +\
-            torch.diag(bw_logprob[:, :bw_logprob.size(0)]).mean()
+            torch.mm(bw_hiddens, x_values.permute(1, 0))), dim=1).data
+        score = torch.diag(fw_logprob[:, i_seq + 2 : i_seq + 2 + fw_logprob.size(0)]).mean() +\
+            torch.diag(bw_logprob[:, i_seq : i_seq + bw_logprob.size(0)]).mean()
 
         # pylint: enable=E1101
 
@@ -140,7 +129,6 @@ class Evaluation(object):
 def main(model_name, feats_name):
     """Main function."""
     compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
-    jump = 1
 
     data = h5py.File(feats_name, 'r')
     data_dict = dict()
@@ -155,15 +143,40 @@ def main(model_name, feats_name):
     labels = []
     scores = []
     tic = time.time()
-    for i, seq in enumerate(seqs[::jump]):
+    feats = np.zeros((np.sum([len(s.split()[1:]) for s in seqs]) + 2*len(seqs), data_dict.values()[2].shape[0]))
+
+    seq_start_idx = [None] * len(seqs)
+    seq_start_idx[0] = 0
+    cum_lens = np.hstack((0, np.cumsum([len(s.split()[1:]) for s in seqs])))
+    for i, seq in enumerate(seqs):
+        sys.stdout.write("Concatenating sequences (%d/%d)\r" % (i, len(seqs)))
+        sys.stdout.flush()
+        if i != 0:
+            seq_start_idx[i] = cum_lens[i] + 2 * i
+        seqimgs = seq.split()[1:]
+        # Disable complaints about no-member in torch
+        # pylint: disable=E1101
+        try:
+            im_feats = torch.from_numpy(np.array([data_dict[d] for d in seqimgs]))
+        except KeyError:
+            print("Key %s not in the precomputed features." % d)
+            import epdb
+            epdb.set_trace()
+
+        feats[seq_start_idx[i] + 1 : seq_start_idx[i] + 1 + len(im_feats), :] = im_feats
+
+    feats = torch.from_numpy(feats.astype(np.float32))
+    feats = torch.nn.functional.normalize(feats, p=2, dim=1)
+
+    for i, seq in enumerate(seqs):
         seqtag = seq.split()[0]
         seqdata = seq.split()[1:]
-        compat = evaluator.compatibility(seqdata, data_dict)
+        compat = evaluator.compatibility(seqdata, data_dict, feats, seq_start_idx[i])
         scores.append(compat)
         labels.append(int(seqtag))
         sys.stdout.write("(%d/%d) SEQ LENGTH = %d - TAG: %s - COMPAT: %.4f - %.2f min left\r" %
-                         (i*jump, len(seqs), len(seqdata), seqtag, compat,
-                          (time.time() - tic)/(i + 1)*jump*(len(seqs)/jump - i*jump)/60))
+                         (i, len(seqs), len(seqdata), seqtag, compat,
+                          (time.time() - tic)/(i + 1)*(len(seqs) - i)/60))
         sys.stdout.flush()
     fpr, tpr, _ = metrics.roc_curve(labels, scores, pos_label=1)
     print("\033[0;31m\nModel: %s\033[0m" % model_name)
