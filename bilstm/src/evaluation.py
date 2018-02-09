@@ -68,7 +68,7 @@ class Evaluation(object):
             im_feats = im_feats.cuda()
             # hidden = (hidden[0].cuda(), hidden[1].cuda())
 
-        # im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
+        im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
         out, _ = self.model.lstm(torch.autograd.Variable(im_feats).unsqueeze(0))
                                  # hidden)
         out = out.data
@@ -77,7 +77,7 @@ class Evaluation(object):
         bw_hiddens = out[0, :im_feats.size(0), out.size(2) // 2:]
 
         im_feats = torch.from_numpy(np.array(list(test_feats.values())))
-        # im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
+        im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
         if self.cuda:
             im_feats = im_feats.cuda()
         x_fw = torch.zeros(im_feats.size(0) + 1, im_feats.size(1))
@@ -89,10 +89,12 @@ class Evaluation(object):
         x_fw[:im_feats.size(0)] = im_feats
         x_bw[1 : im_feats.size(0) + 1] = im_feats
 
+        import epdb; epdb.set_trace()
+
         fw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
-            torch.mm(fw_hiddens, x_fw.permute(1, 0)))).data
+            torch.mm(fw_hiddens, x_fw.permute(1, 0))), dim=1).data
         bw_logprob = torch.nn.functional.log_softmax(torch.autograd.Variable(
-            torch.mm(bw_hiddens, x_bw.permute(1, 0)))).data
+            torch.mm(bw_hiddens, x_bw.permute(1, 0))), dim=1).data
         score = torch.diag(fw_logprob[:, 1 : fw_logprob.size(0) + 1]).mean() +\
             torch.diag(bw_logprob[:, :bw_logprob.size(0)]).mean()
 
