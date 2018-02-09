@@ -38,8 +38,8 @@ def seqs2batch(data, word_to_ix):
     img_data = [i['images'] for i in data]
     txt_data = [i['texts'] for i in data]
     seq_lens = torch.zeros(len(img_data)).int()
-    im_lookup_table = []
-    txt_lookup_table = []
+    im_lookup_table = [None] * len(data)
+    txt_lookup_table = [None] * len(data)
     count = 0
     word_count = 0
     for seq_tag, (seq_imgs, seq_txts) in enumerate(zip(img_data, txt_data)):
@@ -55,14 +55,12 @@ def seqs2batch(data, word_to_ix):
             images = torch.cat((images, img.unsqueeze(0)))
             texts = torch.cat((texts, get_one_hot(txt, word_to_ix)))
             im_seq_lookup.append(count)
-            ###
-            ###
             txt_seq_lookup.append(range(word_count, word_count + len(txt.split())))
             count += 1
             word_count += len(txt.split())
             seq_lens[seq_tag] += 1
-        im_lookup_table.append(im_seq_lookup)
-        txt_lookup_table.append(txt_seq_lookup)
+        im_lookup_table[seq_tag] = im_seq_lookup
+        txt_lookup_table[seq_tag] = txt_seq_lookup
 
     return images, texts, seq_lens, im_lookup_table, txt_lookup_table
 

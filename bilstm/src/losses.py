@@ -164,17 +164,30 @@ class SBContrastiveLoss(nn.Module):
 
         """
         loss = autograd.Variable(torch.Tensor([0]))
+        zero_comp = autograd.Variable(torch.Tensor([0]))
         if descs1.is_cuda:
             loss = loss.cuda()
+            zero_comp = zero_comp.cuda()
         # same_dists = F.cosine_similarity(descs1, descs2)
-        same_dists = paper_dist(descs1, descs2)
+        # same_dists = paper_dist(descs1, descs2)
+        dists = torch.mm(descs1, descs2.permute(1, 0))
+        same_dists = torch.diag(dists)
+        # Get the loss (compensate the fact that dists includes same_dists)
+        desc1_loss = torch.sum(torch.max(zero_comp, self.margin - same_dists.unsqueeze(1) + dists))\
+            - self.margin * len(same_dists)
+        desc2_loss = torch.sum(torch.max(zero_comp, self.margin - same_dists.unsqueeze(0) + dists))\
+            - self.margin * len(same_dists)
+
+        """
         for i, desc1 in enumerate(descs1):
             idxs = [x for x in range(descs2.size()[0]) if x != i]
             # diff_dists = F.cosine_similarity(desc1.repeat(descs2.size()[0] - 1, 1),
             # descs2[idxs, :])
-            diff_dists = paper_dist(desc1.repeat(descs2.size()[0] - 1, 1), descs2[idxs, :])
-            loss += torch.sum(torch.max(self.margin - same_dists[i].repeat(descs2.size()[0] -1,
-                                                                           1) + diff_dists, 1)[0])
+            # diff_dists = paper_dist(desc1.repeat(descs2.size()[0] - 1, 1), descs2[idxs, :])
+            diff_dists = dists[:, idxs][i]
+            loss += torch.sum(torch.max(
+                self.margin - same_dists[i].repeat(descs2.size()[0] -1, 1) + diff_dists, 1)[0])
+            import epdb; epdb.set_trace()
 
         for j, desc2 in enumerate(descs2):
             idxs = [x for x in range(descs1.size()[0]) if x != j]
@@ -183,5 +196,8 @@ class SBContrastiveLoss(nn.Module):
             diff_dists = paper_dist(desc2.repeat(descs1.size()[0] - 1, 1), descs1[idxs, :])
             loss += torch.sum(torch.max(self.margin - same_dists[j].repeat(descs1.size()[0] -1,
                                                                            1) + diff_dists, 1)[0])
+            import epdb; epdb.set_trace()
+        """
+        loss = desc1_loss + desc2_loss
 
         return loss/(descs1.size()[0]**2)
