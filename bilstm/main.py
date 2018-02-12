@@ -170,18 +170,18 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
                                                                                txt_lookup_table,
                                                                                hidden,
                                                                                texts)
-            print "forward took %.2f secs" % (time.time() - tic)
+            print("forward took %.2f secs" % (time.time() - tic))
 
 
             out, _ = pad_packed_sequence(out, batch_first=batch_first)
 
             tic = time.time()
             fw_loss, bw_loss = criterion(packed_batch, out)
-            print "lstm_loss took %.2f secs" % (time.time() - tic)
+            print("lstm_loss took %.2f secs" % (time.time() - tic))
 
             tic = time.time()
             cont_loss = contrastive_criterion(im_feats, txt_feats)
-            print "contrastive_loss took %.2f secs" % (time.time() - tic)
+            print("contrastive_loss took %.2f secs" % (time.time() - tic))
 
             lstm_loss = fw_loss + bw_loss
             loss = lstm_loss + cont_loss

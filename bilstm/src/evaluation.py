@@ -54,13 +54,13 @@ class Evaluation(object):
         # Disable complaints about no-member in torch
         # pylint: disable=E1101
         try:
-            # im_feats = torch.from_numpy(np.array([test_feats[bytes(d, 'utf8')]
-            # for d in sequence]))
             im_feats = torch.from_numpy(np.array([test_feats[d] for d in sequence]))
         except KeyError:
-            print("Key %s not in the precomputed features." % d)
-            import epdb
-            epdb.set_trace()
+            im_feats = torch.from_numpy(np.array([test_feats[bytes(d, 'utf8')]
+                                                  for d in sequence]))
+            # print("Key %s not in the precomputed features." % d)
+            # import epdb
+            # epdb.set_trace()
 
         # hidden = self.model.init_hidden(1)
 
@@ -143,7 +143,8 @@ def main(model_name, feats_name):
     labels = []
     scores = []
     tic = time.time()
-    feats = np.zeros((np.sum([len(s.split()[1:]) for s in seqs]) + 2*len(seqs), data_dict.values()[2].shape[0]))
+    feats = np.zeros((np.sum([len(s.split()[1:]) for s in seqs]) + 2*len(seqs),
+                      list(data_dict.values())[2].shape[0]))
 
     seq_start_idx = [None] * len(seqs)
     seq_start_idx[0] = 0
@@ -158,10 +159,11 @@ def main(model_name, feats_name):
         # pylint: disable=E1101
         try:
             im_feats = torch.from_numpy(np.array([data_dict[d] for d in seqimgs]))
-        except KeyError:
-            print("Key %s not in the precomputed features." % d)
-            import epdb
-            epdb.set_trace()
+        except KeyError as e:
+            im_feats = torch.from_numpy(np.array([data_dict[bytes(d, 'utf8')] for d in seqimgs]))
+            # print("Key %s not in the precomputed features." % e)
+            # import epdb
+            # epdb.set_trace()
 
         feats[seq_start_idx[i] + 1 : seq_start_idx[i] + 1 + len(im_feats), :] = im_feats
 
