@@ -143,12 +143,13 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
     writer = SummaryWriter(log_name)
 
     n_iter = 0
-    tic = time.time()
+    tic_e = time.time()
     for epoch in range(numepochs):
         print("Epoch %d - lr = %.4f" % (epoch, optimizer.param_groups[0]['lr']))
         scheduler.step()
         for batch in dataloaders['train']:
 
+            tic = time.time()
             # Clear gradients, reset hidden state.
             model.zero_grad()
             hidden = model.init_hidden(len(batch))
@@ -163,25 +164,18 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
                 images = images.cuda()
                 texts = texts.cuda()
 
-            tic = time.time()
             packed_batch, (im_feats, txt_feats), (out, hidden) = model.forward(images,
                                                                                seq_lens,
                                                                                im_lookup_table,
                                                                                txt_lookup_table,
                                                                                hidden,
                                                                                texts)
-            print("forward took %.2f secs" % (time.time() - tic))
-
 
             out, _ = pad_packed_sequence(out, batch_first=batch_first)
 
-            tic = time.time()
             fw_loss, bw_loss = criterion(packed_batch, out)
-            print("lstm_loss took %.2f secs" % (time.time() - tic))
 
-            tic = time.time()
             cont_loss = contrastive_criterion(im_feats, txt_feats)
-            print("contrastive_loss took %.2f secs" % (time.time() - tic))
 
             lstm_loss = fw_loss + bw_loss
             loss = lstm_loss + cont_loss
@@ -195,6 +189,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
             # Gradient clipping
             torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
             optimizer.step()
+            print("iteration %d took %.2f secs" % (n_iter, time.time() - tic))
 
             print("\033[4;32miter %d\033[0m" % n_iter)
             print("\033[1;34mTotal loss: %.3f ||| LSTM loss: %.3f ||| Contr. loss: %.3f\033[0m" %
@@ -223,7 +218,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
                 torch.save(model.state_dict(), "%s_%d.pth" % (
                     os.path.join(save_path, 'model'), n_iter))
 
-        print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic))
+        print("\033[1;30mEpoch %i/%i: %f seconds\033[0m" % (epoch, numepochs, time.time() - tic_e))
     writer.close()
 
 
