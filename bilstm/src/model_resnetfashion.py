@@ -2,14 +2,14 @@
 # pylint: disable=W0221
 # pylint: disable=E1101
 import torch
+import json
 import torch.nn as nn
 import torch.autograd as autograd
 from torch.nn.utils.rnn import pack_padded_sequence
-import torchvision.models as models
-from torchvision.models.squeezenet import model_urls
+from wemodels.pytorch.resnetfashion import ResNetFashion18
 
-model_urls['squeezenet1_1'] = model_urls['squeezenet1_1'].replace('https://', 'http://')
-
+heads = eval(json.load(open('models/pretrained/resnetfashion18/config_resnet_clean_with_heads.json'))['net_heads'])
+weights = 'models/pretrained/resnetfashion18/Resnet18_softlabels_200000.pth'
 
 class FullBiLSTM(nn.Module):
     """Bi-LSTM architecture definition.
@@ -35,14 +35,20 @@ class FullBiLSTM(nn.Module):
         self.batch_first = batch_first
         self.vocab_size = vocab_size
         self.textn = nn.Linear(vocab_size, input_dim)
-        self.cnn = models.squeezenet1_1(pretrained=True)
+        loaded_model = ResNetFashion18(heads)
         if freeze:
-            for param in self.cnn.parameters():
+            for param in loaded_model.parameters():
                 param.requires_grad = False
-        self.cnn.classifier = nn.Sequential(nn.Dropout(p=0.5),
-                                            nn.Conv2d(512, input_dim, kernel_size=(1, 1), stride=(1, 1)),
-                                            nn.AvgPool2d(kernel_size=14, stride=1, padding=0,
-                                                         ceil_mode=False, count_include_pad=True))
+        self.cnn = nn.Sequential(loaded_model.conv1,
+                                 loaded_model.bn1,
+                                 loaded_model.relu,
+                                 loaded_model.maxpool,
+                                 loaded_model.layer1,
+                                 loaded_model.layer2,
+                                 loaded_model.layer3,
+                                 loaded_model.layer4,
+                                 loaded_model.avgpool,
+                                 nn.Linear(512, input_dim))
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=1,
                             batch_first=self.batch_first, bidirectional=True,
                             dropout=dropout)
@@ -75,8 +81,17 @@ class FullBiLSTM(nn.Module):
 
         """
         # Get image features:
-        self.cnn.num_classes = self.input_dim
-        im_feats = self.cnn(images)
+        im_feats = self.cnn._modules['8'](
+                   self.cnn._modules['7'](
+                   self.cnn._modules['6'](
+                   self.cnn._modules['5'](
+                   self.cnn._modules['4'](
+                   self.cnn._modules['3'](
+                   self.cnn._modules['2'](
+                   self.cnn._modules['1'](
+                   self.cnn._modules['0'](images))))))))).view([len(images), 512])
+
+        im_feats = self.cnn._modules['9'](im_feats)
         # L2 norm as here: https://github.com/xthan/polyvore/blob/master/polyvore/polyvore_model_bi.py#L328
         im_feats = torch.nn.functional.normalize(im_feats, p=2, dim=1)
 

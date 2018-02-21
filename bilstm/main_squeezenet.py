@@ -257,7 +257,7 @@ def main():
     vocab = create_vocab([TXT_TEST_VAL_TF(t['name']) for d in json.load(
         open(os.path.join('data/label', filenames['train'])))
                           for t in d['items']])
-    print("Vocabulary creation took %.2fsecs - %d words" % (time.time() - tic, len(vocab)))
+    print("Vocabulary creation took %.2f secs - %d words" % (time.time() - tic, len(vocab)))
 
     data_params = {'img_dir': 'data/images',
                    'json_dir': 'data/label',

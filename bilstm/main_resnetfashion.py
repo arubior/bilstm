@@ -8,6 +8,7 @@ import time
 import json
 import argparse
 import numpy as np
+from PIL import Image
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -17,11 +18,12 @@ import torch.autograd as autograd
 from torch.nn.utils.rnn import pad_packed_sequence
 import torchvision
 from src.utils import seqs2batch, ImageTransforms, TextTransforms, create_vocab, write_tensorboard
-from src.model import FullBiLSTM
+from src.model_resnetfashion import FullBiLSTM
 from src.losses import LSTMLosses, SBContrastiveLoss
 from src.datasets import PolyvoreDataset
 from src.datasets import collate_seq
 from tensorboardX import SummaryWriter
+from wevision.transforms import padding as pad
 
 torch.manual_seed(1)
 
@@ -29,16 +31,19 @@ torch.manual_seed(1)
 # DATA LOADER
 # ~~~~~~~~~~~
 
-IMG_TRF = {'train': ImageTransforms(305, 5, 299, 0.5),
-           'test': ImageTransforms(299)}
+TRF = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+
+IMG_TRF = {'train': ImageTransforms(305, 5, 224, 0.5),
+           'test': ImageTransforms(224)}
 
 TXT_TRF = TextTransforms()
 
-IMG_TRAIN_TF = lambda x: torchvision.transforms.ToTensor()(IMG_TRF['train'].random_crop(
+IMG_TRAIN_TF = lambda x: TRF(torchvision.transforms.ToTensor()(IMG_TRF['train'].random_crop(
     IMG_TRF['train'].random_rotation(IMG_TRF['train'].random_horizontal_flip(
-        IMG_TRF['train'].resize(x)))))
+        IMG_TRF['train'].resize(Image.fromarray(pad(np.array(x)))))))))
 
-IMG_TEST_VAL_TF = lambda x: torchvision.transforms.ToTensor()(IMG_TRF['test'].resize(x))
+IMG_TEST_VAL_TF = lambda x: TRF(torchvision.transforms.ToTensor()(IMG_TRF['test'].resize(
+                                Image.fromarray(pad(np.array(x))))))
 
 TXT_TRAIN_TF = lambda x: TXT_TRF.random_delete(TXT_TRF.normalize(x))
 # pylint: disable=W0108
@@ -137,7 +142,7 @@ def train(train_params, dataloaders, cuda, batch_first, epoch_params):
     model, criterion, contrastive_criterion, optimizer, scheduler, vocab, freeze = train_params
     numepochs, nsave, save_path = epoch_params
 
-    log_name = ('runs/L2/lr%.3f' % optimizer.param_groups[0]['initial_lr'])
+    log_name = ('runs/resnetfashion/lr%.3f' % optimizer.param_groups[0]['initial_lr'])
     if freeze:
         log_name += '_frozen'
     writer = SummaryWriter(log_name)
