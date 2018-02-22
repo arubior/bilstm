@@ -296,7 +296,6 @@ def main():
     parser.set_defaults(cuda=True)
     parser.set_defaults(freeze=False)
     parser.set_defaults(batch_first=True)
-    parser.set_defaults(create_vocab=False)
     args = parser.parse_args()
 
     filenames = {'train': 'train_no_dup.json',

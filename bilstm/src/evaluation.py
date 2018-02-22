@@ -47,15 +47,15 @@ class Evaluation(object):
         elif model_type == 'vgg':
             TRF = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
             IMG_TRF = ImageTransforms(224)
-            self.trf = lambda x: TRF(IMG_TRF.resize(x))
+            self.trf = lambda x: TRF(torchvision.transforms.ToTensor()(IMG_TRF.resize(x)))
         elif model_type == 'squeezenet':
             TRF = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
             IMG_TRF = ImageTransforms(227)
-            self.trf = lambda x: TRF(IMG_TRF.resize(x))
+            self.trf = lambda x: TRF(torchvision.transforms.ToTensor()(IMG_TRF.resize(x)))
         elif model_type == 'resnetfashion':
             TRF = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
             IMG_TRF = ImageTransforms(227)
-            self.trf = lambda x: TRF(IMG_TRF.resize(Image.fromarray(pad(np.array(x)))))
+            self.trf = lambda x: TRF(torchvision.transforms.ToTensor()(IMG_TRF.resize(Image.fromarray(pad(np.array(x))))))
         else:
             print("Please, specify a valid model type: inception, vgg, squeezenet or resnetfashion"\
                   "instead of %s" % model_type)
@@ -133,11 +133,10 @@ class Evaluation(object):
     def get_img_feats(self, img_data):
         """Get the features for some images."""
         images = torch.Tensor()
-        imtr = lambda x: torchvision.transforms.ToTensor()(self.trf(x))
         # Disable complaints about no-member in torch
         # pylint: disable=E1101
         for img in img_data:
-            images = torch.cat((images, imtr(img).unsqueeze(0)))
+            images = torch.cat((images, self.trf(img).unsqueeze(0)))
         # pylint: enable=E1101
         images = torch.autograd.Variable(images)
         if self.cuda:
