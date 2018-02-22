@@ -8,6 +8,7 @@ import time
 import json
 import argparse
 import numpy as np
+from PIL import Image
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -17,41 +18,21 @@ import torch.autograd as autograd
 from torch.nn.utils.rnn import pad_packed_sequence
 import torchvision
 from src.utils import seqs2batch, ImageTransforms, TextTransforms, create_vocab, write_tensorboard
-from src.model import FullBiLSTM
+from src.model import FullBiLSTM as inception
+from src.model_vgg import FullBiLSTM as vgg
+from src.model_squeezenet import FullBiLSTM as squeezenet
+from src.model_resnetfashion import FullBiLSTM as resnetfashion
 from src.losses import LSTMLosses, SBContrastiveLoss
 from src.datasets import PolyvoreDataset
 from src.datasets import collate_seq
 from tensorboardX import SummaryWriter
+from wevision.transforms import padding as pad
 
 torch.manual_seed(1)
 
 ########################################################
 # DATA LOADER
 # ~~~~~~~~~~~
-
-IMG_TRF = {'train': ImageTransforms(305, 5, 299, 0.5),
-           'test': ImageTransforms(299)}
-
-TXT_TRF = TextTransforms()
-
-IMG_TRAIN_TF = lambda x: torchvision.transforms.ToTensor()(IMG_TRF['train'].random_crop(
-    IMG_TRF['train'].random_rotation(IMG_TRF['train'].random_horizontal_flip(
-        IMG_TRF['train'].resize(x)))))
-
-IMG_TEST_VAL_TF = lambda x: torchvision.transforms.ToTensor()(IMG_TRF['test'].resize(x))
-
-TXT_TRAIN_TF = lambda x: TXT_TRF.random_delete(TXT_TRF.normalize(x))
-# pylint: disable=W0108
-TXT_TEST_VAL_TF = lambda x: TXT_TRF.normalize(x)
-# pylint: enable=W0108
-
-IMG_TRANSFORMS = {'train': IMG_TRAIN_TF,
-                  'test': IMG_TEST_VAL_TF,
-                  'val': IMG_TEST_VAL_TF}
-
-TXT_TRANSFORMS = {'train': TXT_TRAIN_TF,
-                  'test': TXT_TEST_VAL_TF,
-                  'val': TXT_TEST_VAL_TF}
 
 GRADS = {}
 
@@ -95,10 +76,81 @@ def config(net_params, data_params, opt_params, cuda_params):
         - criterion: loss equation to train
 
     """
-    input_dim, hidden_dim, margin, vocab_size, load_path, freeze = net_params
 
-    model = FullBiLSTM(input_dim, hidden_dim, vocab_size, data_params['batch_first'],
-                       dropout=0.7, freeze=freeze)
+
+
+
+    model_type, input_dim, hidden_dim, margin, vocab_size, load_path, freeze = net_params
+
+
+    if model_type == 'inception':
+
+        model = inception(input_dim, hidden_dim, vocab_size, data_params['batch_first'],
+                           dropout=0.7, freeze=freeze)
+        img_size = 299
+        img_trf = {'train': ImageTransforms(img_size + 6, 5, img_size, 0.5),
+                   'test': ImageTransforms(img_size)}
+        img_train_tf = lambda x: torchvision.transforms.ToTensor()(img_trf['train'].random_crop(
+            img_trf['train'].random_rotation(img_trf['train'].random_horizontal_flip(
+                img_trf['train'].resize(x)))))
+        img_test_val_tf = lambda x: torchvision.transforms.ToTensor()(img_trf['test'].resize(x))
+
+    elif model_type == 'vgg':
+
+        model = vgg(input_dim, hidden_dim, vocab_size, data_params['batch_first'],
+                           dropout=0.7, freeze=freeze)
+        img_size = 224
+        norm_trf = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+        img_trf = {'train': ImageTransforms(img_size + 6, 5, img_size, 0.5),
+                   'test': ImageTransforms(img_size)}
+        img_train_tf = lambda x: norm_trf(torchvision.transforms.ToTensor()(img_trf['train'].random_crop(
+            img_trf['train'].random_rotation(img_trf['train'].random_horizontal_flip(
+                img_trf['train'].resize(x))))))
+        img_test_val_tf = lambda x: norm_trf(torchvision.transforms.ToTensor()(img_trf['test'].resize(x)))
+
+    elif model_type == 'squeezenet':
+        model = squeezenet(input_dim, hidden_dim, vocab_size, data_params['batch_first'],
+                           dropout=0.7, freeze=freeze)
+        img_size = 227
+        norm_trf = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+        img_trf = {'train': ImageTransforms(img_size + 6, 5, img_size, 0.5),
+                   'test': ImageTransforms(img_size)}
+        img_train_tf = lambda x: norm_trf(torchvision.transforms.ToTensor()(img_trf['train'].random_crop(
+            img_trf['train'].random_rotation(img_trf['train'].random_horizontal_flip(
+                img_trf['train'].resize(x))))))
+        img_test_val_tf = lambda x: norm_trf(torchvision.transforms.ToTensor()(img_trf['test'].resize(x)))
+
+    elif model_type == 'resnetfashion':
+        model = resnetfashion(input_dim, hidden_dim, vocab_size, data_params['batch_first'],
+                           dropout=0.7, freeze=freeze)
+        img_size = 227
+        norm_trf = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+        img_trf = {'train': ImageTransforms(img_size + 6, 5, img_size, 0.5),
+                   'test': ImageTransforms(img_size)}
+        img_train_tf = lambda x: norm_trf(torchvision.transforms.ToTensor()(img_trf['train'].random_crop(
+            img_trf['train'].random_rotation(img_trf['train'].random_horizontal_flip(
+                img_trf['train'].resize(Image.fromarray(pad(np.array(x)))))))))
+        img_test_val_tf = lambda x: norm_trf(torchvision.transforms.ToTensor()(img_trf['test'].resize(
+                                             Image.fromarray(pad(np.array(x))))))
+    else:
+        print("Please, specify a valid model type: inception, vgg, squeezenet or resnetfashion"\
+              "instead of %s" % model_type)
+        return
+
+    txt_trf = TextTransforms()
+    txt_train_tf = lambda x: txt_trf.random_delete(txt_trf.normalize(x))
+    # pylint: disable=W0108
+    txt_test_val_tf = lambda x: txt_trf.normalize(x)
+    # pylint: enable=W0108
+
+    img_transforms = {'train': img_train_tf,
+                      'test': img_test_val_tf,
+                      'val': img_test_val_tf}
+
+    txt_transforms = {'train': txt_train_tf,
+                      'test': txt_test_val_tf,
+                      'val': txt_test_val_tf}
+
     if load_path is not None:
         print("Loading weights from %s" % load_path)
         model.load_state_dict(torch.load(load_path))
@@ -114,7 +166,7 @@ def config(net_params, data_params, opt_params, cuda_params):
     dataloaders = {x: torch.utils.data.DataLoader(
         PolyvoreDataset(os.path.join(data_params['json_dir'], data_params['json_files'][x]),
                         data_params['img_dir'],
-                        img_transform=IMG_TRANSFORMS[x], txt_transform=TXT_TRANSFORMS[x]),
+                        img_transform=img_transforms[x], txt_transform=txt_transforms[x]),
         batch_size=data_params['batch_size'],
         shuffle=True, num_workers=24,
         collate_fn=collate_seq,
@@ -232,6 +284,8 @@ def main():
                         default=None)
     parser.add_argument('--lr', '-lr', type=float, help='initial learning rate',
                         default=0.2)
+    PARSER.add_argument('--model_type', '-t', type=str, help='type of the model: inception,'
+                        'vgg, squeezenet or resnetfashion', default='inception')
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
     parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
     parser.add_argument('--freeze', '-fr', dest='freeze', help='freeze cnn layers',
@@ -266,7 +320,7 @@ def main():
                   'weight_decay': 1e-4}
 
     model, dataloaders, optimizer, criterion, contrastive_criterion = config(
-        net_params=[512, 512, 0.2, len(vocab), args.load_path, args.freeze],
+        net_params=args.model_type, [512, 512, 0.2, len(vocab), args.load_path, args.freeze],
         data_params=data_params,
         opt_params=opt_params,
         cuda_params={'cuda': args.cuda,

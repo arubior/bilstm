@@ -7,12 +7,14 @@ import h5py
 import numpy as np
 from PIL import Image
 import torch
-# from model_lstm import FullBiLSTM
-from model import FullBiLSTM
+from model import FullBiLSTM as inception
+from model_vgg import FullBiLSTM as vgg
+from model_squeezenet import FullBiLSTM as squeezenet
 from losses import LSTMLosses
 from utils import ImageTransforms
 import torchvision
 from sklearn import metrics
+from wevision.transforms import padding as pad
 
 
 # Disable superfluous-parens warning for python 3.
@@ -29,7 +31,7 @@ class Evaluation(object):
 
     # We need all the arguments
     # pylint: disable=R0913
-    def __init__(self, model, weights, img_dir, batch_first, cuda):
+    def __init__(self, model, model_type, weights, img_dir, batch_first, cuda):
         """Load the model weights."""
         if cuda:
             self.model = model.cuda()
@@ -38,7 +40,26 @@ class Evaluation(object):
         self.model.eval()
         self.model.load_state_dict(torch.load(weights))
         self.img_dir = img_dir
-        self.trf = ImageTransforms(299)
+        self.model_type = model_type
+        if model_type == 'inception':
+            IMG_TRF = ImageTransforms(299)
+            self.trf = lambda x: IMG_TRF.resize(x)
+        elif model_type == 'vgg':
+            TRF = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+            IMG_TRF = ImageTransforms(224)
+            self.trf = lambda x: TRF(IMG_TRF.resize(x))
+        elif model_type == 'squeezenet':
+            TRF = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+            IMG_TRF = ImageTransforms(227)
+            self.trf = lambda x: TRF(IMG_TRF.resize(x))
+        elif model_type == 'resnetfashion':
+            TRF = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+            IMG_TRF = ImageTransforms(227)
+            self.trf = lambda x: TRF(IMG_TRF.resize(Image.fromarray(pad(np.array(x)))))
+        else:
+            print("Please, specify a valid model type: inception, vgg, squeezenet or resnetfashion"\
+                  "instead of %s" % model_type)
+            return
         self.criterion = LSTMLosses(batch_first, cuda=cuda)
         self.batch_first = batch_first
         self.cuda = cuda
@@ -112,7 +133,7 @@ class Evaluation(object):
     def get_img_feats(self, img_data):
         """Get the features for some images."""
         images = torch.Tensor()
-        imtr = lambda x: torchvision.transforms.ToTensor()(self.trf.resize(x))
+        imtr = lambda x: torchvision.transforms.ToTensor()(self.trf(x))
         # Disable complaints about no-member in torch
         # pylint: disable=E1101
         for img in img_data:
@@ -126,7 +147,7 @@ class Evaluation(object):
 
 # Disable too-many-locals. No clear way to reduce them
 # pylint: disable= R0914
-def main(model_name, feats_name):
+def main(model_name, feats_name, model_type):
     """Main function."""
     compatibility_file = 'data/label/fashion_compatibility_prediction.txt'
 
@@ -135,8 +156,15 @@ def main(model_name, feats_name):
     for fname, feat in zip(data['filenames'], data['features']):
         data_dict[fname] = feat
 
-    model = FullBiLSTM(512, 512, 2480, batch_first=True, dropout=0.7)
-    evaluator = Evaluation(model, model_name, 'data/images',
+    if model_type == 'inception':
+        model = inception(512, 512, 2480, batch_first=True, dropout=0.7)
+    elif model_type == 'inception':
+        model = vgg(512, 512, 2480, batch_first=True, dropout=0.7)
+    elif model_type == 'inception':
+        model = squeezenet(512, 512, 2480, batch_first=True, dropout=0.7)
+    else:
+        print("Please, specify a valid model type: inception, vgg or squeezenet, instead of %s" % model_type)
+    evaluator = Evaluation(model, model_type, model_name, 'data/images',
                            batch_first=True, cuda=True)
 
     seqs = [l.replace('\n', '') for l in open(compatibility_file).readlines()]
@@ -189,5 +217,7 @@ if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument('--model_path', '-m', type=str, help='path to the model', default='')
     PARSER.add_argument('--feats_path', '-sp', type=str, help='path to the features', default='')
+    PARSER.add_argument('--model_type', '-t', type=str, help='type of the model: inception, vgg, squeezenet'
+                        'or resnetfashion', default='inception')
     ARGS = PARSER.parse_args()
-    main(ARGS.model_path, ARGS.feats_path)
+    main(ARGS.model_path, ARGS.feats_path, ARGS.model_type)
