@@ -49,7 +49,9 @@ python src/evaluation.py -m model_path -sp path_to_saved_data [-t model_type]
 
 To reproduce the results in the 1st column of table 1 of the paper, run:
 ```
-python src/outfit_generation.py -m model_path -sp path_to_saved_data -i path_to_save_results[-t model_type]
+python src/outfit_generation.py -m model_path -sp path_to_saved_data -i path_to_save_results [-t model_type]
 ```
+This will generate outfit images in the folder specified in `-i`. First row of the image is the _question_ with an empty space. Second row shows the possible _answers_, with the predicted item squared in green (if correct) or in red (if wrong, with the correct answer in green).
+
 
 [1] Han, Xintong, et al. _"Learning Fashion Compatibility with Bidirectional LSTMs."_ Proceedings of the 2017 ACM on Multimedia Conference. ACM, 2017.
