@@ -1,5 +1,5 @@
 # Learning Fashion Compatibility with Bidirectional LSTMs - PyTorch version
-PyTorch implementation of the [paper](https://arxiv.org/pdf/1707.05691.pdf)
+PyTorch implementation of the paper [Learning Fashion Compatibility with Bidirectional LSTMs](https://arxiv.org/pdf/1707.05691.pdf) [1].
 
 **INSTALLATION**
 
@@ -51,3 +51,5 @@ To reproduce the results in the 1st column of table 1 of the paper, run:
 ```
 python src/outfit_generation.py -m model_path -sp path_to_saved_data -i path_to_save_results[-t model_type]
 ```
+
+[1] Han, Xintong, et al. _"Learning Fashion Compatibility with Bidirectional LSTMs."_ Proceedings of the 2017 ACM on Multimedia Conference. ACM, 2017.
