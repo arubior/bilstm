@@ -30,7 +30,7 @@ Note that we included options to change the default parameters (learning rate, b
 
 **EVALUATION**
 
-We provide a snapshot for our trained model [here](https://drive.google.com/file/d/1IZmG6-tN2e2bQpHL-dapm30JypbMUy8l/view?usp=sharing).
+We provide a snapshot for our trained model (with inception) [here](https://drive.google.com/file/d/1IZmG6-tN2e2bQpHL-dapm30JypbMUy8l/view?usp=sharing).
 
 Prior to running the evaluation of the models, you must extract the features of the test images. In order to do so, run:
 ```
