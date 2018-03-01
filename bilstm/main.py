@@ -36,6 +36,10 @@ torch.manual_seed(1)
 
 GRADS = {}
 
+TXT_TRF = TextTransforms()
+# pylint: disable=W0108
+TXT_TEST_VAL_TF = lambda x: TXT_TRF.normalize(x)
+# pylint: enable=W0108
 
 def save_grad(name):
     """Save gradient value. To be called from "register_hook"."""
@@ -76,10 +80,6 @@ def config(net_params, data_params, opt_params, cuda_params):
         - criterion: loss equation to train
 
     """
-
-
-
-
     model_type, input_dim, hidden_dim, margin, vocab_size, load_path, freeze = net_params
 
 
@@ -123,7 +123,7 @@ def config(net_params, data_params, opt_params, cuda_params):
     elif model_type == 'resnetfashion':
         model = resnetfashion(input_dim, hidden_dim, vocab_size, data_params['batch_first'],
                            dropout=0.7, freeze=freeze)
-        img_size = 227
+        img_size = 224  # or 227?
         norm_trf = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
         img_trf = {'train': ImageTransforms(img_size + 6, 5, img_size, 0.5),
                    'test': ImageTransforms(img_size)}
@@ -137,19 +137,15 @@ def config(net_params, data_params, opt_params, cuda_params):
               "instead of %s" % model_type)
         return
 
-    txt_trf = TextTransforms()
-    txt_train_tf = lambda x: txt_trf.random_delete(txt_trf.normalize(x))
-    # pylint: disable=W0108
-    txt_test_val_tf = lambda x: txt_trf.normalize(x)
-    # pylint: enable=W0108
+    txt_train_tf = lambda x: TXT_TRF.random_delete(TXT_TRF.normalize(x))
 
     img_transforms = {'train': img_train_tf,
                       'test': img_test_val_tf,
                       'val': img_test_val_tf}
 
     txt_transforms = {'train': txt_train_tf,
-                      'test': txt_test_val_tf,
-                      'val': txt_test_val_tf}
+                      'test': TXT_TEST_VAL_TF,
+                      'val': TXT_TEST_VAL_TF}
 
     if load_path is not None:
         print("Loading weights from %s" % load_path)
@@ -284,7 +280,7 @@ def main():
                         default=None)
     parser.add_argument('--lr', '-lr', type=float, help='initial learning rate',
                         default=0.2)
-    PARSER.add_argument('--model_type', '-t', type=str, help='type of the model: inception,'
+    parser.add_argument('--model_type', '-t', type=str, help='type of the model: inception,'
                         'vgg, squeezenet or resnetfashion', default='inception')
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
     parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
@@ -309,6 +305,7 @@ def main():
         open(os.path.join('data/label', filenames['train'])))
                           for t in d['items']])
     print("Vocabulary creation took %.2f secs - %d words" % (time.time() - tic, len(vocab)))
+    import epdb; epdb.set_trace()
 
     data_params = {'img_dir': 'data/images',
                    'json_dir': 'data/label',
@@ -319,7 +316,7 @@ def main():
                   'weight_decay': 1e-4}
 
     model, dataloaders, optimizer, criterion, contrastive_criterion = config(
-        net_params=args.model_type, [512, 512, 0.2, len(vocab), args.load_path, args.freeze],
+        net_params=[args.model_type, 512, 512, 0.2, len(vocab), args.load_path, args.freeze],
         data_params=data_params,
         opt_params=opt_params,
         cuda_params={'cuda': args.cuda,

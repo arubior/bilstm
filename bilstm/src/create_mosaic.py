@@ -3,7 +3,6 @@ import json
 import numpy as np
 import cv2
 
-
 def create_mosaic(images, border, direction, correct=None, predicted=None):
     """
     direction 0 ==> horizontal
@@ -44,7 +43,40 @@ def create_mosaic(images, border, direction, correct=None, predicted=None):
     return mosaic
 
 
-def create_img(outfit, predicted, savepath, border=5):
+def create_mosaic_hl(images, border, direction, positions):
+    """
+    direction 0 ==> horizontal
+    direction 1 ==> vertical
+    """
+
+    big_size = np.sum(np.array([i.shape for i in images]), 0)[:2] + border * 2 * len(images)
+    max_size = np.max(np.array([i.shape for i in images]), 0) + border * 2
+    if direction == 0:
+        mosaic = np.zeros((max_size[0], big_size[1], 3), np.float32)
+    if direction == 1:
+        mosaic = np.zeros((big_size[0], max_size[1], 3), np.float32)
+
+    start = border
+
+    for i, image in enumerate(images):
+        ih, iw, _ = image.shape
+        if direction == 0:
+            if i in positions:
+                mosaic[0: ih + 2 * border, start - border : start + border + iw, :] =  [0, 255, 0]
+            mosaic[border : ih + border, start : start + iw, :] = image
+            start += border * 2 + iw
+    return mosaic
+
+
+def create_img_outfit(outfit, positions, savepath, border=5):
+    outfit_names = ['data/images/' + i.replace('_', '/') + '.jpg' for i in outfit]
+    outfit_prods = [cv2.imread(img) for img in outfit_names]
+    outfit = create_mosaic_hl(outfit_prods, border, 0, positions)
+    if not os.path.exists(os.path.dirname(savepath)):
+        os.makedirs(os.path.dirname(savepath))
+    cv2.imwrite(savepath, outfit.astype(np.uint8))
+
+def create_img_fitb(outfit, predicted, savepath, border=5):
     position = outfit['blank_position'] - 1
 
     question_names = outfit['question']
