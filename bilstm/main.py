@@ -21,12 +21,10 @@ from src.utils import seqs2batch, ImageTransforms, TextTransforms, create_vocab,
 from src.model import FullBiLSTM as inception
 from src.model_vgg import FullBiLSTM as vgg
 from src.model_squeezenet import FullBiLSTM as squeezenet
-from src.model_resnetfashion import FullBiLSTM as resnetfashion
 from src.losses import LSTMLosses, SBContrastiveLoss
 from src.datasets import PolyvoreDataset
 from src.datasets import collate_seq
 from tensorboardX import SummaryWriter
-from wevision.transforms import padding as pad
 
 torch.manual_seed(1)
 
@@ -120,20 +118,8 @@ def config(net_params, data_params, opt_params, cuda_params):
                 img_trf['train'].resize(x))))))
         img_test_val_tf = lambda x: norm_trf(torchvision.transforms.ToTensor()(img_trf['test'].resize(x)))
 
-    elif model_type == 'resnetfashion':
-        model = resnetfashion(input_dim, hidden_dim, vocab_size, data_params['batch_first'],
-                           dropout=0.7, freeze=freeze)
-        img_size = 224  # or 227?
-        norm_trf = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-        img_trf = {'train': ImageTransforms(img_size + 6, 5, img_size, 0.5),
-                   'test': ImageTransforms(img_size)}
-        img_train_tf = lambda x: norm_trf(torchvision.transforms.ToTensor()(img_trf['train'].random_crop(
-            img_trf['train'].random_rotation(img_trf['train'].random_horizontal_flip(
-                img_trf['train'].resize(Image.fromarray(pad(np.array(x)))))))))
-        img_test_val_tf = lambda x: norm_trf(torchvision.transforms.ToTensor()(img_trf['test'].resize(
-                                             Image.fromarray(pad(np.array(x))))))
     else:
-        print("Please, specify a valid model type: inception, vgg, squeezenet or resnetfashion"\
+        print("Please, specify a valid model type: inception, vgg or squeezenet"\
               "instead of %s" % model_type)
         return
 
@@ -281,7 +267,7 @@ def main():
     parser.add_argument('--lr', '-lr', type=float, help='initial learning rate',
                         default=0.2)
     parser.add_argument('--model_type', '-t', type=str, help='type of the model: inception,'
-                        'vgg, squeezenet or resnetfashion', default='inception')
+                        'vgg or squeezenet', default='inception')
     parser.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
     parser.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')
     parser.add_argument('--freeze', '-fr', dest='freeze', help='freeze cnn layers',

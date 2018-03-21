@@ -10,7 +10,6 @@ import torch
 from src.model import FullBiLSTM as inception
 from src.model_vgg import FullBiLSTM as vgg
 from src.model_squeezenet import FullBiLSTM as squeezenet
-from src.model_resnetfashion import FullBiLSTM as resnetfashion
 from create_mosaic import create_img_outfit
 from src.utils import TextTransforms, get_one_hot
 
@@ -170,11 +169,9 @@ def main(model_name, model_type, feats_name, img_savepath, query_file, vocab_fil
         model = vgg(512, 512, 2480, batch_first=True, dropout=0.7)
     elif model_type == 'squeezenet':
         model = squeezenet(512, 512, 2480, batch_first=True, dropout=0.7)
-    elif model_type == 'resnetfashion':
-        model = resnetfashion(512, 512, 2480, batch_first=True, dropout=0.7)
     else:
         print("Please, specify a valid model type: inception, vgg, squeezenet"\
-              "or resnetfashion instead of %s" % model_type)
+              "instead of %s" % model_type)
         return
 
     """Load the model weights."""
@@ -278,8 +275,8 @@ def main(model_name, model_type, feats_name, img_savepath, query_file, vocab_fil
 if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument('--model_path', '-m', type=str, help='path to the model', default='')
-    PARSER.add_argument('--model_type', '-t', type=str, help='type of the model: inception, vgg, squeezenet'
-                        'or resnetfashion', default='inception')
+    PARSER.add_argument('--model_type', '-t', type=str, help='type of the model: inception, vgg or squeezenet',
+                        default='inception')
     PARSER.add_argument('--feats_path', '-sp', type=str, help='path to the features', default='')
     PARSER.add_argument('--cuda', dest='cuda', help='use cuda', action='store_true')
     PARSER.add_argument('--no-cuda', dest='cuda', help="don't use cuda", action='store_false')

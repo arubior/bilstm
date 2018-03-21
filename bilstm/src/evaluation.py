@@ -10,7 +10,6 @@ import torch
 from model import FullBiLSTM as inception
 from model_vgg import FullBiLSTM as vgg
 from model_squeezenet import FullBiLSTM as squeezenet
-from model_resnetfashion import FullBiLSTM as resnetfashion
 from losses import LSTMLosses
 from utils import ImageTransforms
 import torchvision
@@ -53,12 +52,8 @@ class Evaluation(object):
             TRF = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
             IMG_TRF = ImageTransforms(227)
             self.trf = lambda x: TRF(torchvision.transforms.ToTensor()(IMG_TRF.resize(x)))
-        elif model_type == 'resnetfashion':
-            TRF = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-            IMG_TRF = ImageTransforms(224)
-            self.trf = lambda x: TRF(torchvision.transforms.ToTensor()(IMG_TRF.resize(Image.fromarray(pad(np.array(x))))))
         else:
-            print("Please, specify a valid model type: inception, vgg, squeezenet or resnetfashion"\
+            print("Please, specify a valid model type: inception, vgg or squeezenet"\
                   "instead of %s" % model_type)
             return
         self.criterion = LSTMLosses(batch_first, cuda=cuda)
@@ -144,17 +139,6 @@ class Evaluation(object):
             images = images.cuda()
         if self.model.__module__ == 'model_squeezenet':
             self.model.cnn.num_classes = self.model.input_dim
-        if self.model.__module__ == 'model_resnetfashion':
-            im_feats = self.model.cnn._modules['8'](
-                       self.model.cnn._modules['7'](
-                       self.model.cnn._modules['6'](
-                       self.model.cnn._modules['5'](
-                       self.model.cnn._modules['4'](
-                       self.model.cnn._modules['3'](
-                       self.model.cnn._modules['2'](
-                       self.model.cnn._modules['1'](
-                       self.model.cnn._modules['0'](images))))))))).view([len(images), 512])
-            return self.model.cnn._modules['9'](im_feats)
         return self.model.cnn(images)
 
 
@@ -175,8 +159,6 @@ def main(model_name, feats_name, model_type):
         model = vgg(512, 512, 2480, batch_first=True, dropout=0.7)
     elif model_type == 'squeezenet':
         model = squeezenet(512, 512, 2480, batch_first=True, dropout=0.7)
-    elif model_type == 'resnetfashion':
-        model = resnetfashion(512, 512, 2480, batch_first=True, dropout=0.7)
     else:
         print("Please, specify a valid model type: inception, vgg or squeezenet, instead of %s" % model_type)
     evaluator = Evaluation(model, model_type, model_name, 'data/images',
@@ -232,7 +214,7 @@ if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument('--model_path', '-m', type=str, help='path to the model', default='')
     PARSER.add_argument('--feats_path', '-sp', type=str, help='path to the features', default='')
-    PARSER.add_argument('--model_type', '-t', type=str, help='type of the model: inception, vgg, squeezenet'
-                        'or resnetfashion', default='inception')
+    PARSER.add_argument('--model_type', '-t', type=str, help='type of the model: inception, vgg or squeezenet',
+                        default='inception')
     ARGS = PARSER.parse_args()
     main(ARGS.model_path, ARGS.feats_path, ARGS.model_type)
