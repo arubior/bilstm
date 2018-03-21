@@ -14,8 +14,9 @@ nltk.download('wordnet')
 ```
 
 The code has been tested with these two configurations:
-    * python 2.7.6 - Pytorch 0.3.0.post4     - CUDA 7.5 - numpy 1.11.1 - sklearn 0.18.1
-    * python 3.6.0 - PyTorch 0.4.0a0+040336f - CUDA 9.1 - numpy 1.13.3 - sklearn 0.19.1
+* python 2.7.6 - Pytorch 0.3.0.post4     - CUDA 7.5 - numpy 1.11.1 - sklearn 0.18.1   
+* python 3.6.0 - PyTorch 0.4.0a0+040336f - CUDA 9.1 - numpy 1.13.3 - sklearn 0.19.1
+    
 
 **TRAINING**
 
