@@ -19,7 +19,7 @@ The code has been tested with these two configurations:
 
 **DATASET**
 
-Download the Polyvore dataset from the authors of the paper [here](https://github.com/xthan/polyvore-dataset).
+Download the Polyvore dataset from the authors of the paper [here](https://github.com/xthan/polyvore-dataset) and extract it in the _bilstm/data_ folder.
 
 **TRAINING**
 
